@@ -87,7 +87,8 @@ processed before processing the current one
 extern int errno;
 
 struct Rollup {
-    struct work work;
+    char name[MAXPATH];
+    struct stat stat;
     struct {
         pthread_mutex_t mutex;
         size_t count;
@@ -154,7 +155,7 @@ int do_rollup(struct Rollup * rollup) {
 
             /* save this separately for remove */
             char child_db_name[MAXPATH];
-            SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->work.name);
+            SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->name);
 
             /* open this database in readonly mode */
             char child_db_uri[MAXPATH];
@@ -169,7 +170,7 @@ int do_rollup(struct Rollup * rollup) {
                 sqlite3_snprintf(MAXSQL, attach, "ATTACH %Q as 'subdir'", child_db_uri);
 
                 if (sqlite3_exec(dst, attach, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->work.name, err);
+                    fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->name, err);
                     child_failed = 1;
                 }
                 sqlite3_free(err);
@@ -179,7 +180,7 @@ int do_rollup(struct Rollup * rollup) {
             /* copy all entries rows */
             {
                 if (sqlite3_exec(dst, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM subdir.summary as s, subdir.entries as e", NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to copy rows from \"%s\": %s\n", child->work.name, err);
+                    fprintf(stderr, "Error: Failed to copy rows from \"%s\": %s\n", child->name, err);
                     child_failed = 1;
                 }
                 sqlite3_free(err);
@@ -192,7 +193,7 @@ int do_rollup(struct Rollup * rollup) {
                 sqlite3_snprintf(MAXSQL, attach, "DETACH 'subdir'");
 
                 if (sqlite3_exec(dst, attach, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->work.name, err);
+                    fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->name, err);
                     child_failed = 1;
                 }
                 sqlite3_free(err);
@@ -202,7 +203,7 @@ int do_rollup(struct Rollup * rollup) {
             /* if the roll up succeeded, remove the child database and directory */
             if (!child_failed) {
                 remove(child_db_name);
-                rmdir(child->work.name);
+                rmdir(child->name);
             }
 
             failed_rollup += child_failed;
@@ -216,7 +217,7 @@ int do_rollup(struct Rollup * rollup) {
         }
     }
     else {
-        fprintf(stderr, "Error: Failed to open parent database at \"%s\": %s\n", rollup->work.name, sqlite3_errmsg(dst));
+        fprintf(stderr, "Error: Failed to open parent database at \"%s\": %s\n", rollup->name, sqlite3_errmsg(dst));
         rc = -1;
     }
     closedb(dst);
@@ -267,9 +268,9 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
 
 int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void * args) {
     struct Rollup * rollup = (struct Rollup *) data;
-    DIR * dir = opendir(rollup->work.name);
+    DIR * dir = opendir(rollup->name);
     if (!dir) {
-        fprintf(stderr, "Error: Could not open directory \"%s\": %s\n", rollup->work.name, strerror(errno));
+        fprintf(stderr, "Error: Could not open directory \"%s\": %s\n", rollup->name, strerror(errno));
         free(data);
         return 0;
     }
@@ -287,14 +288,14 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
         }
 
         struct Rollup new_work;
-        SNPRINTF(new_work.work.name, MAXPATH, "%s/%s", rollup->work.name, entry->d_name);
+        SNPRINTF(new_work.name, MAXPATH, "%s/%s", rollup->name, entry->d_name);
 
-        if (lstat(new_work.work.name, &new_work.work.statuso) != 0) {
-            fprintf(stderr, "Error: Could not stat \"%s\": %s", new_work.work.name, strerror(errno));
+        if (lstat(new_work.name, &new_work.stat) != 0) {
+            fprintf(stderr, "Error: Could not stat \"%s\": %s", new_work.name, strerror(errno));
             continue;
         }
 
-        if (!S_ISDIR(new_work.work.statuso.st_mode)) {
+        if (!S_ISDIR(new_work.stat.st_mode)) {
             continue;
         }
 
@@ -357,15 +358,15 @@ int main(int argc, char * argv[]) {
     struct Rollup * roots = malloc(count * sizeof(struct Rollup));
     for(size_t i = 0; i < count; i++) {
         struct Rollup * root = &roots[i];
-        SNPRINTF(root->work.name, MAXPATH, "%s", argv[idx + i]);
-        if (lstat(root->work.name, &root->work.statuso) != 0) {
-            fprintf(stderr, "Could not stat %s\n", root->work.name);
+        SNPRINTF(root->name, MAXPATH, "%s", argv[idx + i]);
+        if (lstat(root->name, &root->stat) != 0) {
+            fprintf(stderr, "Could not stat %s\n", root->name);
             free(root);
             continue;
         }
 
-        if (!S_ISDIR(root->work.statuso.st_mode)) {
-            fprintf(stderr, "%s is not a directory\n", root->work.name);
+        if (!S_ISDIR(root->stat.st_mode)) {
+            fprintf(stderr, "%s is not a directory\n", root->name);
             free(root);
             continue;
         }
