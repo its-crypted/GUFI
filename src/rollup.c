@@ -86,6 +86,8 @@ processed before processing the current one
 
 extern int errno;
 
+const char SUBDIR_ATTACH_NAME[] = "subdir";
+
 struct Rollup {
     char name[MAXPATH];
     struct stat stat;
@@ -98,13 +100,6 @@ struct Rollup {
     struct Rollup * parent;
 };
 
-/* if this is called, increment the counter by 1 */
-int get_rolledup(void * args, int count, char ** data, char ** columns) {
-    size_t * rolledup = (size_t *) args;
-    (*rolledup)++;
-    return 0;
-}
-
 /* check if the current directory can be rolled up */
 int can_rollup(struct Rollup * rollup) {
     /* ********************* */
@@ -116,8 +111,8 @@ int can_rollup(struct Rollup * rollup) {
     size_t rolledup = 0;
     sll_loop(&rollup->subdirs, node) {
         struct Rollup * child = (struct Rollup *) sll_node_data(node);
-
-        total += child->rolledup;
+        rolledup += child->rolledup;
+        total++;
     }
 
     return (total == rolledup);
@@ -145,6 +140,7 @@ int do_rollup(struct Rollup * rollup) {
                            , NULL, NULL
                            #endif
         );
+
     if (dst) {
         /* keep track of failed roll ups */
         int failed_rollup = 0;
@@ -167,7 +163,7 @@ int do_rollup(struct Rollup * rollup) {
             /* attach subdir */
             {
                 char attach[MAXSQL];
-                sqlite3_snprintf(MAXSQL, attach, "ATTACH %Q as 'subdir'", child_db_uri);
+                sqlite3_snprintf(MAXSQL, attach, "ATTACH %Q as %Q", child_db_uri, SUBDIR_ATTACH_NAME);
 
                 if (sqlite3_exec(dst, attach, NULL, NULL, &err) != SQLITE_OK) {
                     fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->name, err);
@@ -178,22 +174,27 @@ int do_rollup(struct Rollup * rollup) {
             }
 
             /* copy all entries rows */
-            {
-                if (sqlite3_exec(dst, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM subdir.summary as s, subdir.entries as e", NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to copy rows from \"%s\": %s\n", child->name, err);
+            if (!child_failed) {
+                char copy[MAXSQL];
+                sqlite3_snprintf(MAXSQL, copy, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM %s.summary as s, %s.entries as e", SUBDIR_ATTACH_NAME, SUBDIR_ATTACH_NAME);
+
+                if (sqlite3_exec(dst, copy, NULL, NULL, &err) != SQLITE_OK) {
+                    fprintf(stderr, "Error: Failed to copy rows from \"%s\" to \"%s\": %s\n", child->name, rollup->name, err);
                     child_failed = 1;
                 }
                 sqlite3_free(err);
                 err = NULL;
             }
 
+            /* probably want to update summary table */
+
             /* detach subdir */
             {
                 char attach[MAXSQL];
-                sqlite3_snprintf(MAXSQL, attach, "DETACH 'subdir'");
+                sqlite3_snprintf(MAXSQL, attach, "DETACH %Q", SUBDIR_ATTACH_NAME);
 
                 if (sqlite3_exec(dst, attach, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->name, err);
+                    fprintf(stderr, "Error: Failed to dettach \"%s\": %s\n", child->name, err);
                     child_failed = 1;
                 }
                 sqlite3_free(err);
@@ -202,8 +203,13 @@ int do_rollup(struct Rollup * rollup) {
 
             /* if the roll up succeeded, remove the child database and directory */
             if (!child_failed) {
-                remove(child_db_name);
-                rmdir(child->name);
+                if (unlink(child_db_name) != 0) {
+                    fprintf(stderr, "Error: Failed to delete \"%s\": %s\n", child_db_name, strerror(errno));
+                }
+
+                if (rmdir(child->name) != 0) {
+                    fprintf(stderr, "Error: Failed to remove \"%s\": %s\n", child->name, strerror(errno));
+                }
             }
 
             failed_rollup += child_failed;
@@ -220,6 +226,7 @@ int do_rollup(struct Rollup * rollup) {
         fprintf(stderr, "Error: Failed to open parent database at \"%s\": %s\n", rollup->name, sqlite3_errmsg(dst));
         rc = -1;
     }
+
     closedb(dst);
 
     return rc;
@@ -247,7 +254,9 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
     /* no subdirectories still need processing, so can attempt to roll up */
 
     if (can_rollup(rollup)) {
-        do_rollup(rollup);
+        if (do_rollup(rollup) != 0) {
+            fprintf(stderr, "Error: Rollup failed: %s\n", rollup->name);
+        }
     }
 
     /* clean up first, just in case parent runs before  */
@@ -340,7 +349,6 @@ int main(int argc, char * argv[]) {
         sub_help();
     if (idx < 0)
         return -1;
-
 
     struct QPTPool * pool = QPTPool_init(in.maxthreads);
     if (!pool) {
