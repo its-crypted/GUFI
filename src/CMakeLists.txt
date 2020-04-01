@@ -188,6 +188,7 @@ set(C_SOURCES
   gufi_stat.c
   querydb.c
   querydbn.c
+  rollup.c
 )
 
 # build the C executables
