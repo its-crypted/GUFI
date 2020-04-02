@@ -62,49 +62,55 @@ OF SUCH DAMAGE.
 
 
 
-/*
-   This header provides an API for parallelized
-   bottom-up traversal of a directory tree.
-   Operations are performed on directories
-   during the upward portion of the traversal.
-*/
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-#ifndef __GUFI_BOTTOM_UP__
-#define __GUFI_BOTTOM_UP__
+#include "bf.h"
+#include "BottomUp.h"
+#include "utils.h"
 
-#include <pthread.h>
+extern int errno;
 
-#include "SinglyLinkedList.h"
+/* Remove all non-subdirectories in the   */
+/* current directory. Then remove itself. */
+/* Subdirectories are already gone, so    */
+/* they don't have to processed at the    */
+/* current level.                         */
+void rm_dir(void * args) {
+    struct BottomUp * dir = (struct BottomUp *) args;
 
-/*
-  Structure containing the necessary information
-  to traverse a tree upwards.
+    char db_name[MAXPATH];
+    SNPRINTF(db_name, MAXPATH, "%s/" DBNAME, dir->name);
 
-  This struct should be wrapped by a user struct
-  and should be the first variable.
+    sll_loop(&dir->subnondirs, node) {
+        struct BottomUp * entry = (struct BottomUp *) sll_node_data(node);
+        if (unlink(entry->name) != 0) {
+            fprintf(stderr, "Warning: Failed to delete \"%s\": %s\n", entry->name, strerror(errno));
+        }
+    }
 
-  This struct will likely be directly used by
-  the user, so the imeplementation is not opaque.
-*/
-struct BottomUp {
-    char name[MAXPATH];
-    struct {
-        pthread_mutex_t mutex;
-        size_t count;
-    } refs;
-    struct sll subdirs;
-    struct sll subnondirs;
-    struct BottomUp * parent;
-};
+    if (rmdir(dir->name) != 0) {
+        fprintf(stderr, "Warning: Failed to remove \"%s\": %s\n", dir->name, strerror(errno));
+    }
+}
 
-/* Signature of function for processing */
-/* a directory as the tree is ascending */
-typedef void (*AscendFunc_t)(void * user_struct);
+void sub_help() {
+   printf("directory        directory to delete\n");
+   printf("\n");
+}
 
-/* Function user should call to walk a tree bottom up in parallel */
-int parallel_bottomup(char ** root_names, size_t root_count,
-                      const size_t thread_count,
-                      const size_t user_struct_size, AscendFunc_t func,
-                      const int track_non_dirs);
+int main(int argc, char * argv[]) {
+    int idx = parse_cmd_line(argc, argv, "hHn:", 1, "directory ...", &in);
+    if (in.helped)
+        sub_help();
+    if (idx < 0)
+        return -1;
 
-#endif
+    return parallel_bottomup(argv + idx, argc - idx,
+                             in.maxthreads,
+                             sizeof(struct BottomUp), rm_dir,
+                             1);
+}

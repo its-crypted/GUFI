@@ -88,8 +88,9 @@ processed before processing the current one
 extern int errno;
 
 struct UserArgs {
-    size_t size;
+    size_t user_struct_size;
     AscendFunc_t func;
+    int track_non_dirs;
 };
 
 int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * args) {
@@ -123,6 +124,7 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
     /* clean up 'struct BottomUp's here, when they are */
     /* children instead of when they are the parent  */
     sll_destroy(&bu->subdirs, 1);
+    sll_destroy(&bu->subnondirs, 1);
 
     /* mutex is not needed any more */
     pthread_mutex_destroy(&bu->refs.mutex);
@@ -131,6 +133,19 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
     QPTPool_enqueue(ctx, id, ascend_to_top, bu->parent);
 
     return 0;
+}
+
+static struct BottomUp * track(const char * name, const size_t name_len,
+                               const size_t user_struct_size, struct sll * sll) {
+    struct BottomUp * copy = malloc(user_struct_size);
+
+    /* don't need anything else */
+    memcpy(copy->name, name, name_len + 1);
+
+    /* store the subdirectories without enqueuing them */
+    sll_push(sll, copy);
+
+    return copy;
 }
 
 int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void * args) {
@@ -142,11 +157,12 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
         return 0;
     }
 
-    const size_t size = ((struct UserArgs *) args)->size;
+    struct UserArgs * ua = (struct UserArgs *) args;
 
     pthread_mutex_init(&bu->refs.mutex, NULL);
     bu->refs.count = 0;
     sll_init(&bu->subdirs);
+    sll_init(&bu->subnondirs);
 
     struct dirent * entry = NULL;
     while ((entry = readdir(dir))) {
@@ -164,20 +180,17 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
             continue;
         }
 
-        if (!S_ISDIR(st.st_mode)) {
-            continue;
+        if (S_ISDIR(st.st_mode)) {
+            track(new_work.name, name_len, ua->user_struct_size, &bu->subdirs);
+
+            /* count how many subdirectories this directory has */
+            bu->refs.count++;
         }
-
-        struct BottomUp * copy = malloc(size);
-
-        /* don't need anything else */
-        memcpy(copy->name, new_work.name, name_len + 1);
-
-        /* store the subdirectories without enqueuing them */
-        sll_push(&bu->subdirs, copy);
-
-        /* count how many children this directory has */
-        bu->refs.count++;
+        else {
+            if (ua->track_non_dirs) {
+                track(new_work.name, name_len, ua->user_struct_size, &bu->subnondirs);
+            }
+        }
     }
 
     closedir(dir);
@@ -202,9 +215,10 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 
 int parallel_bottomup(char ** root_names, size_t root_count,
                       const size_t thread_count,
-                      const size_t size, AscendFunc_t func) {
-    if (size < sizeof(struct BottomUp)) {
-        fprintf(stderr, "Error: Provided size is smaller than a struct BottomUp\n");
+                      const size_t user_struct_size, AscendFunc_t func,
+                      const int track_non_dirs) {
+    if (user_struct_size < sizeof(struct BottomUp)) {
+        fprintf(stderr, "Error: Provided user struct size is smaller than a struct BottomUp\n");
         return -1;
     }
 
@@ -214,8 +228,9 @@ int parallel_bottomup(char ** root_names, size_t root_count,
     }
 
     struct UserArgs ua;
-    ua.size = size;
+    ua.user_struct_size = user_struct_size;
     ua.func = func;
+    ua.track_non_dirs = track_non_dirs;
 
     struct QPTPool * pool = QPTPool_init(thread_count);
     if (!pool) {
@@ -229,7 +244,7 @@ int parallel_bottomup(char ** root_names, size_t root_count,
     }
 
     /* enqueue all root directories */
-    struct BottomUp * roots = malloc(root_count * size);
+    struct BottomUp * roots = malloc(root_count * user_struct_size);
     for(size_t i = 0; i < root_count; i++) {
         struct BottomUp * root = &roots[i];
         SNPRINTF(root->name, MAXPATH, "%s", root_names[i]);
