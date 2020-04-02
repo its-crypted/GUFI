@@ -223,5 +223,6 @@ int main(int argc, char * argv[]) {
 
     return parallel_bottomup(argv + idx, argc - idx,
                              in.maxthreads,
-                             sizeof(struct RollUp), rollup);
+                             sizeof(struct RollUp), rollup,
+                             0);
 }
