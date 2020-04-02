@@ -74,7 +74,7 @@ OF SUCH DAMAGE.
 
 extern int errno;
 
-static const char GUFI_SQLITE_VFS[] = "unix-none";
+const char GUFI_SQLITE_VFS[] = "unix-none";
 
 char *rsql = // "DROP TABLE IF EXISTS readdirplus;"
             "CREATE TABLE readdirplus(path TEXT, type TEXT, inode INT64 PRIMARY KEY, pinode INT64, suspect INT64);";
@@ -164,7 +164,7 @@ int create_table_wrapper(const char *name, sqlite3 * db, const char * sql_name, 
     return rc;
 }
 
-static int set_pragmas(sqlite3 * db) {
+int set_pragmas(sqlite3 * db) {
     int rc = 0;
 
     // try to turn sychronization off

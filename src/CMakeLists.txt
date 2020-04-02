@@ -113,6 +113,7 @@ endif()
 # create the GUFI library, which contains all of the common source files
 set(GUFI_SOURCES
   bf.c
+  BottomUp.c
   dbutils.c
   debug.c
   outfiles.c

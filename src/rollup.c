@@ -62,25 +62,15 @@ OF SUCH DAMAGE.
 
 
 
-/*
-iterate through all directories
-wait until all subdirectories have been
-processed before processing the current one
-*/
-
-#include <dirent.h>
 #include <errno.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #include "bf.h"
+#include "BottomUp.h"
 #include "dbutils.h"
-#include "QueuePerThreadPool.h"
 #include "SinglyLinkedList.h"
 #include "utils.h"
 
@@ -88,20 +78,13 @@ extern int errno;
 
 const char SUBDIR_ATTACH_NAME[] = "subdir";
 
-struct Rollup {
-    char name[MAXPATH];
-    struct stat stat;
-    struct {
-        pthread_mutex_t mutex;
-        size_t count;
-    } refs;
+struct RollUp {
+    struct BottomUp data;
     int rolledup;
-    struct sll subdirs;
-    struct Rollup * parent;
 };
 
 /* check if the current directory can be rolled up */
-int can_rollup(struct Rollup * rollup) {
+int can_rollup(struct RollUp * rollup) {
     /* ********************* */
     /* need more checks here */
     /* ********************* */
@@ -109,8 +92,8 @@ int can_rollup(struct Rollup * rollup) {
     /* check if subdirectories have been rolled up */
     size_t total = 0;
     size_t rolledup = 0;
-    sll_loop(&rollup->subdirs, node) {
-        struct Rollup * child = (struct Rollup *) sll_node_data(node);
+    sll_loop(&rollup->data.subdirs, node) {
+        struct RollUp * child = (struct RollUp *) sll_node_data(node);
         rolledup += child->rolledup;
         total++;
     }
@@ -119,67 +102,55 @@ int can_rollup(struct Rollup * rollup) {
 }
 
 /*
-< 0 - could not open database or failed to update rolledup column
+< 0 - could not open database
   0 - success
 > 0 - number of subdirectories that failed to be moved
 */
-int do_rollup(struct Rollup * rollup) {
+int do_rollup(struct RollUp * rollup) {
     /* assume that this directory can be rolled up */
     /* can_rollup should have been called earlier  */
 
     int rc = 0;
 
     char dbname[MAXPATH];
-    SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, rollup->name);
-    sqlite3 * dst = opendb(dbname, RDWR, 0, 0
-                           , NULL, NULL
-                           #ifdef DEBUG
-                           , NULL, NULL
-                           , NULL, NULL
-                           , NULL, NULL
-                           , NULL, NULL
-                           #endif
-        );
+    SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, rollup->data.name);
 
-    if (dst) {
+    /* if there is no database file in this directory, don't create one         */
+    /* don't use opendb to avoid creating a new database file and hiding errors */
+    sqlite3 * dst = NULL;
+    if (sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE, GUFI_SQLITE_VFS) == SQLITE_OK) {
+        /* apply database optimizations */
+        set_pragmas(dst);
+
         /* keep track of failed roll ups */
         int failed_rollup = 0;
 
         /* process each subdirectory */
-        sll_loop(&rollup->subdirs, node) {
-            struct Rollup * child = (struct Rollup *) sll_node_data(node);
+        sll_loop(&rollup->data.subdirs, node) {
+            struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
 
             /* save this separately for remove */
             char child_db_name[MAXPATH];
             SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->name);
 
-            /* open this database in readonly mode */
-            char child_db_uri[MAXPATH];
-            SNPRINTF(child_db_uri, MAXPATH, "file:%s?mode=ro", child_db_name);
-
-            char * err = NULL;
             size_t child_failed = 0;
 
             /* attach subdir */
             {
-                char attach[MAXSQL];
-                sqlite3_snprintf(MAXSQL, attach, "ATTACH %Q as %Q", child_db_uri, SUBDIR_ATTACH_NAME);
-
-                if (sqlite3_exec(dst, attach, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to attach \"%s\": %s\n", child->name, err);
+                if (!attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY)) {
                     child_failed = 1;
                 }
-                sqlite3_free(err);
-                err = NULL;
             }
 
             /* copy all entries rows */
+            /* this query will fail if the child's summary table is empty */
             if (!child_failed) {
                 char copy[MAXSQL];
                 sqlite3_snprintf(MAXSQL, copy, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM %s.summary as s, %s.entries as e", SUBDIR_ATTACH_NAME, SUBDIR_ATTACH_NAME);
 
+                char * err = NULL;
                 if (sqlite3_exec(dst, copy, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to copy rows from \"%s\" to \"%s\": %s\n", child->name, rollup->name, err);
+                    fprintf(stderr, "Error: Failed to copy rows from \"%s\" to \"%s\": %s\n", child->name, rollup->data.name, err);
                     child_failed = 1;
                 }
                 sqlite3_free(err);
@@ -190,29 +161,25 @@ int do_rollup(struct Rollup * rollup) {
 
             /* detach subdir */
             {
-                char attach[MAXSQL];
-                sqlite3_snprintf(MAXSQL, attach, "DETACH %Q", SUBDIR_ATTACH_NAME);
-
-                if (sqlite3_exec(dst, attach, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to dettach \"%s\": %s\n", child->name, err);
-                    child_failed = 1;
-                }
-                sqlite3_free(err);
-                err = NULL;
+                /* ignore errors - next attach will fail */
+                detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
             }
+
+            failed_rollup += child_failed;
 
             /* if the roll up succeeded, remove the child database and directory */
             if (!child_failed) {
                 if (unlink(child_db_name) != 0) {
-                    fprintf(stderr, "Error: Failed to delete \"%s\": %s\n", child_db_name, strerror(errno));
+                    fprintf(stderr, "Warning: Failed to delete \"%s\": %s\n", child_db_name, strerror(errno));
                 }
 
                 if (rmdir(child->name) != 0) {
-                    fprintf(stderr, "Error: Failed to remove \"%s\": %s\n", child->name, strerror(errno));
+                    fprintf(stderr, "Warning: Failed to remove \"%s\": %s\n", child->name, strerror(errno));
                 }
-            }
 
-            failed_rollup += child_failed;
+                /* either of these failing leaves unneeded filesystem */
+                /* entries but does not affect the roll up status     */
+            }
         }
 
         if (failed_rollup) {
@@ -223,7 +190,9 @@ int do_rollup(struct Rollup * rollup) {
         }
     }
     else {
-        fprintf(stderr, "Error: Failed to open parent database at \"%s\": %s\n", rollup->name, sqlite3_errmsg(dst));
+        /* this error message should only be seen if there are        */
+        /* directories without database files at the top of the index */
+        fprintf(stderr, "Warning: Could not open database at \"%s\": %s\n", rollup->data.name, sqlite3_errmsg(dst));
         rc = -1;
     }
 
@@ -232,110 +201,12 @@ int do_rollup(struct Rollup * rollup) {
     return rc;
 }
 
-int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * args) {
-    /* reached root */
-    if (!data) {
-        return 0;
+void rollup(void * args) {
+    struct RollUp * dir = (struct RollUp *) args;
+    dir->rolledup = 0;
+    if (can_rollup(dir)) {
+        do_rollup(dir);
     }
-
-    struct Rollup * rollup = (struct Rollup *) data;
-
-    pthread_mutex_lock(&rollup->refs.mutex);
-    size_t remaining = 0;
-    if (rollup->refs.count) {
-        remaining = --rollup->refs.count;
-    }
-    pthread_mutex_unlock(&rollup->refs.mutex);
-
-    if (remaining) {
-        return 0;
-    }
-
-    /* no subdirectories still need processing, so can attempt to roll up */
-
-    if (can_rollup(rollup)) {
-        if (do_rollup(rollup) != 0) {
-            fprintf(stderr, "Error: Rollup failed: %s\n", rollup->name);
-        }
-    }
-
-    /* clean up first, just in case parent runs before  */
-    /* the current `struct Rollup` finishes cleaning up */
-
-    /* clean up 'struct Rollup's here, when they are */
-    /* children instead of when they are the parent  */
-    sll_destroy(&rollup->subdirs, 1);
-
-    /* mutex is not needed any more */
-    pthread_mutex_destroy(&rollup->refs.mutex);
-
-    /* always push parent to decrement their reference counters */
-    QPTPool_enqueue(ctx, id, ascend_to_top, rollup->parent);
-
-    return 0;
-}
-
-int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void * args) {
-    struct Rollup * rollup = (struct Rollup *) data;
-    DIR * dir = opendir(rollup->name);
-    if (!dir) {
-        fprintf(stderr, "Error: Could not open directory \"%s\": %s\n", rollup->name, strerror(errno));
-        free(data);
-        return 0;
-    }
-
-    pthread_mutex_init(&rollup->refs.mutex, NULL);
-    rollup->refs.count = 0;
-    rollup->rolledup = 0;
-    sll_init(&rollup->subdirs);
-
-    struct dirent * entry = NULL;
-    while ((entry = readdir(dir))) {
-        if ((strncmp(entry->d_name, ".",  2) == 0) ||
-            (strncmp(entry->d_name, "..", 3) == 0)) {
-            continue;
-        }
-
-        struct Rollup new_work;
-        SNPRINTF(new_work.name, MAXPATH, "%s/%s", rollup->name, entry->d_name);
-
-        if (lstat(new_work.name, &new_work.stat) != 0) {
-            fprintf(stderr, "Error: Could not stat \"%s\": %s", new_work.name, strerror(errno));
-            continue;
-        }
-
-        if (!S_ISDIR(new_work.stat.st_mode)) {
-            continue;
-        }
-
-        struct Rollup * copy = malloc(sizeof(struct Rollup));
-        memcpy(copy, &new_work, sizeof(struct Rollup));
-
-        /* store the entries without enqueuing them */
-        sll_push(&rollup->subdirs, copy);
-
-        /* count how many children this directory has */
-        rollup->refs.count++;
-    }
-
-    closedir(dir);
-
-    /* if there are subdirectories, this directory cannot go back up just yet */
-    if (rollup->refs.count) {
-        sll_loop(&rollup->subdirs, node)  {
-            struct Rollup *child = (struct Rollup *) sll_node_data(node);
-            child->parent = rollup;
-
-            /* keep going down */
-            QPTPool_enqueue(ctx, id, descend_to_bottom, child);
-        }
-    }
-    else {
-        /* start working upwards */
-        QPTPool_enqueue(ctx, id, ascend_to_top, rollup);
-    }
-
-    return 0;
 }
 
 void sub_help() {
@@ -350,49 +221,7 @@ int main(int argc, char * argv[]) {
     if (idx < 0)
         return -1;
 
-    struct QPTPool * pool = QPTPool_init(in.maxthreads);
-    if (!pool) {
-        fprintf(stderr, "Error: Failed to initialize thread pool\n");
-        return -1;
-    }
-
-    if (QPTPool_start(pool, NULL) != (size_t) in.maxthreads) {
-        fprintf(stderr, "Error: Failed to start threads\n");
-        return -1;
-    }
-
-    /* enqueue all directories */
-    const size_t count = argc - idx;
-    struct Rollup * roots = malloc(count * sizeof(struct Rollup));
-    for(size_t i = 0; i < count; i++) {
-        struct Rollup * root = &roots[i];
-        SNPRINTF(root->name, MAXPATH, "%s", argv[idx + i]);
-        if (lstat(root->name, &root->stat) != 0) {
-            fprintf(stderr, "Could not stat %s\n", root->name);
-            free(root);
-            continue;
-        }
-
-        if (!S_ISDIR(root->stat.st_mode)) {
-            fprintf(stderr, "%s is not a directory\n", root->name);
-            free(root);
-            continue;
-        }
-
-        root->parent = NULL;
-
-        QPTPool_enqueue(pool, i % in.maxthreads, descend_to_bottom, root);
-    }
-
-    QPTPool_wait(pool);
-
-    /* clean up root directories since they don't get freed during processing */
-    free(roots);
-
-    const size_t thread_count = QPTPool_threads_completed(pool);
-    fprintf(stderr, "Ran %zu threads\n", thread_count);
-
-    QPTPool_destroy(pool);
-
-    return 0;
+    return parallel_bottomup(argv + idx, argc - idx,
+                             in.maxthreads,
+                             sizeof(struct RollUp), rollup);
 }

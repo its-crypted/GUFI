@@ -62,87 +62,47 @@ OF SUCH DAMAGE.
 
 
 
-#ifndef DBUTILS_H
-#define DBUTILS_H
+/*
+   This header provides an API for parallelized
+   bottom-up traversal of a directory tree.
+   Operations are performed on directories
+   during the upward portion of the traversal.
+*/
 
-#include <sys/stat.h>
-#include <sqlite3.h>
+#ifndef __GUFI_BOTTOM_UP__
+#define __GUFI_BOTTOM_UP__
 
-#ifdef DEBUG
-#include <time.h>
-#endif
+#include <pthread.h>
 
-#include "utils.h"
+#include "SinglyLinkedList.h"
 
+/*
+  Structure containing the necessary information
+  to traverse a tree upwards.
 
-extern char *rsql;
-extern char *rsqli;
+  This struct should be wrapped by a user struct
+  and should be the first variable.
 
-extern char *esql;
-extern char *esqli;
+  This struct will likely be directly used by
+  the user, so the imeplementation is not opaque.
+*/
+struct BottomUp {
+    char name[MAXPATH];
+    struct {
+        pthread_mutex_t mutex;
+        size_t count;
+    } refs;
+    struct sll subdirs;
+    struct BottomUp * parent;
+};
 
-extern char *ssql;
-extern char *tsql;
+/* Signature of function for processing */
+/* a directory as the tree is ascending */
+typedef void (*AscendFunc_t)(void * user_struct);
 
-extern char *vesql;
-
-extern char *vssqldir;
-extern char *vssqluser;
-extern char *vssqlgroup;
-
-extern char *vtssqldir;
-extern char *vtssqluser;
-extern char *vtssqlgroup;
-
-extern const char GUFI_SQLITE_VFS[];
-
-sqlite3 * attachdb(const char *name, sqlite3 *db, const char *dbn, const OpenMode mode);
-
-sqlite3 * detachdb(const char *name, sqlite3 *db, const char *dbn);
-
-int create_table_wrapper(const char *name, sqlite3 * db, const char * sql_name, const char * sql, int (*callback)(void*,int,char**,char**), void * args);
-
-int set_pragmas(sqlite3 * db);
-
-sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, const int load_extensions,
-                 int (*modifydb)(const char * name, sqlite3 * db, void * args), void * modifydb_args
-                 #ifdef DEBUG
-                 , struct timespec * sqlite3_open_start
-                 , struct timespec * sqlite3_open_end
-                 , struct timespec * create_tables_start
-                 , struct timespec * create_tables_end
-                 , struct timespec * set_pragmas_start
-                 , struct timespec * set_pragmas_end
-                 , struct timespec * load_extension_start
-                 , struct timespec * load_extension_end
-                 #endif
-                 );
-
-int rawquerydb(const char *name, int isdir, sqlite3 *db, char *sqlstmt,
-               int printpath, int printheader, int printing, int ptid);
-
-int querytsdb(const char *name, struct sum *sumin, sqlite3 *db, int *recs,int ts);
-
-int startdb(sqlite3 *db);
-
-int stopdb(sqlite3 *db);
-
-int closedb(sqlite3 *db);
-
-int insertdbfin(sqlite3_stmt *res);
-
-sqlite3_stmt * insertdbprep(sqlite3 *db);
-sqlite3_stmt * insertdbprepr(sqlite3 *db);
-
-int insertdbgo(struct work *pwork, sqlite3 *db, sqlite3_stmt *res);
-int insertdbgor(struct work *pwork, sqlite3 *db, sqlite3_stmt *res);
-
-int insertsumdb(sqlite3 *sdb, struct work *pwork,struct sum *su);
-
-int inserttreesumdb(const char *name, sqlite3 *sdb, struct sum *su,int rectype,int uid,int gid);
-
-int addqueryfuncs(sqlite3 *db, size_t id, size_t lvl, char * starting_dir);
-
-size_t print_results(sqlite3_stmt *res, FILE *out, const int printpath, const int printheader, const int printrows, const char *delim);
+/* Function user should call to walk a tree bottom up in parallel */
+int parallel_bottomup(char ** root_names, size_t root_count,
+                      const size_t thread_count,
+                      const size_t size, AscendFunc_t func);
 
 #endif
