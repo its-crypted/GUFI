@@ -76,6 +76,36 @@ OF SUCH DAMAGE.
 
 #include "SinglyLinkedList.h"
 
+#if defined(DEBUG) && defined(PER_THREAD_STATS)
+#include "debug.h"
+#include "OutputBuffers.h"
+
+#define debug_init(obs, count, capacity)                                \
+    if (!OutputBuffers_init(obs, count, capacity)) {                    \
+        fprintf(stderr, "Error: Could not initialize OutputBuffers\n"); \
+        return -1;                                                      \
+    }
+
+#define debug_create_buffer(size) char debug_buffer[size]
+#define debug_define_start(name) define_start(name)
+#define debug_end_print(obs, id, buf, str, name)        \
+    timestamp_end(name);                                \
+    print_debug(obs, id, buf, sizeof(buf), "BottomUp_" str, &name)
+
+#define debug_destroy(obs, count)                   \
+    OutputBuffers_flush_single(obs, count, stderr); \
+    OutputBuffers_destroy(obs, count)
+
+#else
+
+#define debug_init(obs, count, capacity);
+#define debug_create_buffer(size)
+#define debug_define_start(name)
+#define debug_end_print(obs, id, buf, str, name)
+#define debug_destroy(obs, count)
+
+#endif
+
 /*
   Structure containing the necessary information
   to traverse a tree upwards.
@@ -105,6 +135,10 @@ typedef void (*AscendFunc_t)(void * user_struct);
 int parallel_bottomup(char ** root_names, size_t root_count,
                       const size_t thread_count,
                       const size_t user_struct_size, AscendFunc_t func,
-                      const int track_non_dirs);
+                      const int track_non_dirs
+                      #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                      , struct OutputBuffers * debug_buffers
+                      #endif
+);
 
 #endif
