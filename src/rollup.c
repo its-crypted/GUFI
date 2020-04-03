@@ -221,8 +221,25 @@ int main(int argc, char * argv[]) {
     if (idx < 0)
         return -1;
 
-    return parallel_bottomup(argv + idx, argc - idx,
-                             in.maxthreads,
-                             sizeof(struct RollUp), rollup,
-                             0);
+    #if defined(DEBUG) && defined(PER_THREAD_STATS)
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    epoch = since_epoch(&now);
+    #endif
+
+    struct OutputBuffers debug_buffers;
+    debug_init(&debug_buffers, in.maxthreads + 1, 1024 * 1024);
+
+    const int rc = parallel_bottomup(argv + idx, argc - idx,
+                                     in.maxthreads,
+                                     sizeof(struct RollUp), rollup,
+                                     0
+                                     #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                                     , &debug_buffers
+                                     #endif
+        );
+
+    debug_destroy(&debug_buffers, in.maxthreads + 1);
+
+    return rc;
 }
