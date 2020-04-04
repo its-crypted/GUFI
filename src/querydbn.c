@@ -155,9 +155,7 @@ int main(int argc, char *argv[])
    //printf("processing query name %s  numb dbs %d\n",name, numdbs);
    if (!(db = opendb(name, RDWR, 1, 1,
                NULL, NULL
-               #ifdef DEBUG
-               , NULL, NULL
-               , NULL, NULL
+               #if defined(DEBUG) && defined(PER_THREAD_STATS)
                , NULL, NULL
                , NULL, NULL
                #endif

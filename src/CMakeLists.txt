@@ -69,17 +69,12 @@ endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   # ##########################################
   # Debug prints
-  # Only one of these should be used at once
-  # Also should not be used with BENCHMARK
+  # Should not be used with BENCHMARK
+  # ##########################################
 
   # Cumulative times shown at end of run
   if (CUMULATIVE_TIMES)
     add_definitions(-DCUMULATIVE_TIMES=1)
-  endif()
-
-  # Timestamps showing what each thread is doing
-  if (PER_THREAD_STATS)
-    add_definitions(-DPER_THREAD_STATS=1)
   endif()
 
   # print subdirectory counts
@@ -91,7 +86,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if (QPTPOOL_QUEUE_SIZE)
     add_definitions(-DQPTPOOL_QUEUE_SIZE=1)
   endif()
-
 endif()
 
 # remove opendb (implies NO_ADDQUERYFUNCS and NO_SQL_EXEC)

@@ -114,9 +114,7 @@ off_t create_template(int * fd) {
 
     sqlite3 * db = opendb(name, RDWR, 0, 0,
                           create_tables, NULL
-                          #ifdef DEBUG
-                          , NULL, NULL
-                          , NULL, NULL
+                          #if defined(DEBUG) && defined(PER_THREAD_STATS)
                           , NULL, NULL
                           , NULL, NULL
                           #endif
