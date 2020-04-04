@@ -164,7 +164,7 @@ int create_table_wrapper(const char *name, sqlite3 * db, const char * sql_name, 
     return rc;
 }
 
-int set_pragmas(sqlite3 * db) {
+int set_db_pragmas(sqlite3 * db) {
     int rc = 0;
 
     // try to turn sychronization off
@@ -206,27 +206,31 @@ int set_pragmas(sqlite3 * db) {
     return rc;
 }
 
+#if defined(DEBUG) && defined(PER_THREAD_STATS)
+#define check_set_start(name)            \
+    if (name) {                          \
+        timestamp_set_start_impl(*name);  \
+    }
+
+#define check_set_end(name)              \
+    if (name) {                          \
+        timestamp_set_end_impl(*name);    \
+    }
+#else
+#define check_set_start(name)
+#define check_set_end(name)
+#endif
+
 sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, const int load_extensions,
-                 int (*modifydb)(const char * name, sqlite3 * db, void * args), void * modifydb_args
-                 #ifdef DEBUG
-                 , struct timespec * sqlite3_open_start
-                 , struct timespec * sqlite3_open_end
-                 , struct timespec * set_pragmas_start
-                 , struct timespec * set_pragmas_end
-                 , struct timespec * load_extension_start
-                 , struct timespec * load_extension_end
-                 , struct timespec * modifydb_start
-                 , struct timespec * modifydb_end
+                 int (*modifydb_func)(const char * name, sqlite3 * db, void * args), void * modifydb_args
+                 #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                 , struct start_end * sqlite3_open,   struct start_end * set_pragmas
+                 , struct start_end * load_extension, struct start_end * modify_db
                  #endif
     ) {
     sqlite3 * db = NULL;
 
-    #ifdef DEBUG
-    if (sqlite3_open_start) {
-        clock_gettime(CLOCK_MONOTONIC, sqlite3_open_start);
-    }
-    #endif
-
+    check_set_start(sqlite3_open);
     int flags = SQLITE_OPEN_URI;
     if (mode == RDONLY) {
         flags |= SQLITE_OPEN_READONLY;
@@ -236,89 +240,42 @@ sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, c
     }
 
     if (sqlite3_open_v2(name, &db, flags, GUFI_SQLITE_VFS) != SQLITE_OK) {
-        #ifdef DEBUG
-        if (sqlite3_open_end) {
-            clock_gettime(CLOCK_MONOTONIC, sqlite3_open_end);
-        }
-        #endif
+        check_set_end(sqlite3_open);
         /* fprintf(stderr, "Cannot open database: %s %s rc %d\n", name, sqlite3_errmsg(db), sqlite3_errcode(db)); */
         sqlite3_close(db); /* close db even if it didn't open to avoid memory leaks */
         return NULL;
     }
+    check_set_end(sqlite3_open);
 
-    #ifdef DEBUG
-    if (sqlite3_open_end) {
-        clock_gettime(CLOCK_MONOTONIC, sqlite3_open_end);
-    }
-    #endif
-
-    #ifdef DEBUG
-    if (set_pragmas_start) {
-        clock_gettime(CLOCK_MONOTONIC, set_pragmas_start);
-    }
-    #endif
-
+    check_set_start(set_pragmas);
     if (setpragmas) {
         /* ignore errors */
-        set_pragmas(db);
+        set_db_pragmas(db);
     }
+    check_set_end(set_pragmas);
 
-    #ifdef DEBUG
-    if (set_pragmas_end) {
-        clock_gettime(CLOCK_MONOTONIC, set_pragmas_end);
-    }
-    #endif
-
-    #ifdef DEBUG
-    if (load_extension_start) {
-        clock_gettime(CLOCK_MONOTONIC, load_extension_start);
-    }
-    #endif
-
+    check_set_start(load_extension);
     if (load_extensions) {
         if ((sqlite3_db_config(db, SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, NULL) != SQLITE_OK) || /* enable loading of extensions */
             (sqlite3_extension_init(db, NULL, NULL)                                != SQLITE_OK)) { /* load the sqlite3-pcre extension */
-            #ifdef DEBUG
-            if (load_extension_end) {
-                clock_gettime(CLOCK_MONOTONIC, load_extension_end);
-            }
-            #endif
+            check_set_end(load_extension);
             fprintf(stderr, "Unable to load regex extension\n");
             sqlite3_close(db);
             return NULL;
         }
     }
+    check_set_end(load_extension);
 
-    #ifdef DEBUG
-    if (load_extension_end) {
-        clock_gettime(CLOCK_MONOTONIC, load_extension_end);
-    }
-    #endif
-
-    #ifdef DEBUG
-    if (modifydb_start) {
-        clock_gettime(CLOCK_MONOTONIC, modifydb_start);
-    }
-    #endif
-
-    if (modifydb) {
-        if (modifydb(name, db, modifydb_args) != 0) {
-            #ifdef DEBUG
-            if (modifydb_end) {
-                clock_gettime(CLOCK_MONOTONIC, modifydb_end);
-            }
-            #endif
+    check_set_start(modify_db);
+    if (modifydb_func) {
+        if (modifydb_func(name, db, modifydb_args) != 0) {
+            check_set_end(modify_db);
             fprintf(stderr, "Cannot modify database: %s %s rc %d\n", name, sqlite3_errmsg(db), sqlite3_errcode(db));
             sqlite3_close(db);
             return NULL;
         }
     }
-
-    #ifdef DEBUG
-    if (modifydb_end) {
-        clock_gettime(CLOCK_MONOTONIC, modifydb_end);
-    }
-    #endif
+    check_set_end(modify_db);
 
     return db;
 }

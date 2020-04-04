@@ -449,9 +449,7 @@ int process_path(const char *path, FILE *out, const char *format) {
     int rc = 1;
     if ((db = opendb(dbname, RDONLY, 0, 1,
                      NULL, NULL
-                     #ifdef DEBUG
-                     , NULL, NULL
-                     , NULL, NULL
+                     #if defined(DEBUG) && defined(PER_THREAD_STATS)
                      , NULL, NULL
                      , NULL, NULL
                      #endif

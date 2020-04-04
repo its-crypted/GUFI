@@ -78,6 +78,12 @@ if (BENCHMARK)
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  # ##########################################
+  # Debug prints
+  # Should not be used with BENCHMARK
+  # ##########################################
+
+  # Cumulative times shown at end of run
   option(CUMULATIVE_TIMES "Sum the durations of events across all threads and print them at the end" Off)
   if (CUMULATIVE_TIMES)
     add_definitions(-DCUMULATIVE_TIMES=1)
@@ -88,6 +94,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DPER_THREAD_STATS=1)
   endif()
 
+  # print subdirectory counts
   option(SUBDIRECTORY_COUNTS "Print the number of subdirectories under each directory" Off)
   if (SUBDIRECTORY_COUNTS)
     add_definitions(-DSUBDIRECTORY_COUNTS=1)

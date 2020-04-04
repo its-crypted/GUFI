@@ -71,25 +71,36 @@ OF SUCH DAMAGE.
 #include "bf.h"
 #include "BottomUp.h"
 #include "dbutils.h"
+#include "debug.h"
 #include "SinglyLinkedList.h"
 #include "utils.h"
 
 extern int errno;
+
+#if defined(DEBUG) && defined(PER_THREAD_STATS)
+#define timestamp_args , id, timestamp_buffers
+#else
+#define timestamp_args
+#endif
 
 const char SUBDIR_ATTACH_NAME[] = "subdir";
 
 struct RollUp {
     struct BottomUp data;
     int rolledup;
+    size_t id;
 };
 
 /* check if the current directory can be rolled up */
-int can_rollup(struct RollUp * rollup) {
+int can_rollup(struct RollUp * rollup timestamp_sig) {
+    timestamp_create_buffer(4096);
+    timestamp_start(can_roll_up);
     /* ********************* */
     /* need more checks here */
     /* ********************* */
 
     /* check if subdirectories have been rolled up */
+    timestamp_start(check_subdirs_rolledup);
     size_t total = 0;
     size_t rolledup = 0;
     sll_loop(&rollup->data.subdirs, node) {
@@ -97,6 +108,9 @@ int can_rollup(struct RollUp * rollup) {
         rolledup += child->rolledup;
         total++;
     }
+    timestamp_end(timestamp_buffers, id, ts_buf, "check_subdirs_rolledup", check_subdirs_rolledup);
+
+    timestamp_end(timestamp_buffers, id, ts_buf, "can_rollup", can_roll_up);
 
     return (total == rolledup);
 }
@@ -106,9 +120,12 @@ int can_rollup(struct RollUp * rollup) {
   0 - success
 > 0 - number of subdirectories that failed to be moved
 */
-int do_rollup(struct RollUp * rollup) {
+int do_rollup(struct RollUp * rollup timestamp_sig) {
     /* assume that this directory can be rolled up */
     /* can_rollup should have been called earlier  */
+
+    timestamp_create_buffer(4096);
+    timestamp_start(do_roll_up);
 
     int rc = 0;
 
@@ -117,16 +134,25 @@ int do_rollup(struct RollUp * rollup) {
 
     /* if there is no database file in this directory, don't create one         */
     /* don't use opendb to avoid creating a new database file and hiding errors */
+    timestamp_start(open_db);
     sqlite3 * dst = NULL;
-    if (sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE, GUFI_SQLITE_VFS) == SQLITE_OK) {
+    const int opendb_rc = sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE, GUFI_SQLITE_VFS);
+    timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_db);
+
+    if (opendb_rc == SQLITE_OK) {
         /* apply database optimizations */
-        set_pragmas(dst);
+        timestamp_start(optimize_db);
+        set_db_pragmas(dst);
+        timestamp_end(timestamp_buffers, id, ts_buf, "set_pragmas", optimize_db);
 
         /* keep track of failed roll ups */
         int failed_rollup = 0;
 
         /* process each subdirectory */
+        timestamp_start(rollup_subdirs);
         sll_loop(&rollup->data.subdirs, node) {
+            timestamp_start(rollup_subdir);
+
             struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
 
             /* save this separately for remove */
@@ -180,7 +206,9 @@ int do_rollup(struct RollUp * rollup) {
                 /* either of these failing leaves unneeded filesystem */
                 /* entries but does not affect the roll up status     */
             }
+            timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
         }
+        timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdirs", rollup_subdirs);
 
         if (failed_rollup) {
             rc = (int) failed_rollup;
@@ -198,14 +226,15 @@ int do_rollup(struct RollUp * rollup) {
 
     closedb(dst);
 
+    timestamp_end(timestamp_buffers, id, ts_buf, "do_rollup", do_roll_up);
     return rc;
 }
 
-void rollup(void * args) {
+void rollup(void * args timestamp_sig) {
     struct RollUp * dir = (struct RollUp *) args;
     dir->rolledup = 0;
-    if (can_rollup(dir)) {
-        do_rollup(dir);
+    if (can_rollup(dir timestamp_args)) {
+        do_rollup(dir timestamp_args);
     }
 }
 
@@ -222,24 +251,21 @@ int main(int argc, char * argv[]) {
         return -1;
 
     #if defined(DEBUG) && defined(PER_THREAD_STATS)
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    epoch = since_epoch(&now);
+    epoch = since_epoch(NULL);
     #endif
 
-    struct OutputBuffers debug_buffers;
-    debug_init(&debug_buffers, in.maxthreads + 1, 1024 * 1024);
+    timestamp_init(timestamp_buffers, in.maxthreads + 1, 1024 * 1024, NULL);
 
     const int rc = parallel_bottomup(argv + idx, argc - idx,
                                      in.maxthreads,
                                      sizeof(struct RollUp), rollup,
                                      0
                                      #if defined(DEBUG) && defined(PER_THREAD_STATS)
-                                     , &debug_buffers
+                                     , timestamp_buffers
                                      #endif
         );
 
-    debug_destroy(&debug_buffers, in.maxthreads + 1);
+    timestamp_destroy(timestamp_buffers);
 
     return rc;
 }

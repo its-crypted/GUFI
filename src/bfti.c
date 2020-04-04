@@ -127,9 +127,7 @@ static int processdir(struct QPTPool * ctx, const size_t id, void * data, void *
     SNPRINTF(dbname, MAXPATH, "%s/%s", passmywork->name, DBNAME);
     if ((db=opendb(dbname, RDONLY, 1, 1,
                    NULL, NULL
-                   #ifdef DEBUG
-                   , NULL, NULL
-                   , NULL, NULL
+                   #if defined(DEBUG) && defined(PER_THREAD_STATS)
                    , NULL, NULL
                    , NULL, NULL
                    #endif
@@ -194,9 +192,7 @@ int processfin() {
      if (in.writetsum) {
         if (! (tdb = opendb(dbpath, RDWR, 1, 1,
                             create_tables, NULL
-                            #ifdef DEBUG
-                            , NULL, NULL
-                            , NULL, NULL
+                            #if defined(DEBUG) && defined(PER_THREAD_STATS)
                             , NULL, NULL
                             , NULL, NULL
                             #endif
@@ -277,7 +273,11 @@ int main(int argc, char *argv[])
      if (validate_inputs())
         return -1;
 
-     struct QPTPool * pool = QPTPool_init(in.maxthreads);
+     struct QPTPool * pool = QPTPool_init(in.maxthreads
+                                         #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                                         , NULL
+                                         #endif
+         );
      if (!pool) {
          fprintf(stderr, "Failed to initialize thread pool\n");
          return -1;

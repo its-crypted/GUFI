@@ -68,12 +68,8 @@ OF SUCH DAMAGE.
 #include <sys/stat.h>
 #include <sqlite3.h>
 
-#ifdef DEBUG
-#include <time.h>
-#endif
-
+#include "debug.h"
 #include "utils.h"
-
 
 extern char *rsql;
 extern char *rsqli;
@@ -102,19 +98,13 @@ sqlite3 * detachdb(const char *name, sqlite3 *db, const char *dbn);
 
 int create_table_wrapper(const char *name, sqlite3 * db, const char * sql_name, const char * sql, int (*callback)(void*,int,char**,char**), void * args);
 
-int set_pragmas(sqlite3 * db);
+int set_db_pragmas(sqlite3 * db);
 
 sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, const int load_extensions,
-                 int (*modifydb)(const char * name, sqlite3 * db, void * args), void * modifydb_args
-                 #ifdef DEBUG
-                 , struct timespec * sqlite3_open_start
-                 , struct timespec * sqlite3_open_end
-                 , struct timespec * create_tables_start
-                 , struct timespec * create_tables_end
-                 , struct timespec * set_pragmas_start
-                 , struct timespec * set_pragmas_end
-                 , struct timespec * load_extension_start
-                 , struct timespec * load_extension_end
+                 int (*modifydb_func)(const char * name, sqlite3 * db, void * args), void * modifydb_args
+                 #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                 , struct start_end * sqlite3_open,   struct start_end * set_pragmas
+                 , struct start_end * load_extension, struct start_end * modify_db
                  #endif
                  );
 

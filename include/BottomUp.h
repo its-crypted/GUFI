@@ -69,41 +69,19 @@ OF SUCH DAMAGE.
    during the upward portion of the traversal.
 */
 
-#ifndef __GUFI_BOTTOM_UP__
-#define __GUFI_BOTTOM_UP__
+#ifndef GUFI_BOTTOM_UP
+#define GUFI_BOTTOM_UP
 
 #include <pthread.h>
 
+#include "debug.h"
 #include "SinglyLinkedList.h"
 
+/* extra AscendFunc_t argments */
 #if defined(DEBUG) && defined(PER_THREAD_STATS)
-#include "debug.h"
-#include "OutputBuffers.h"
-
-#define debug_init(obs, count, capacity)                                \
-    if (!OutputBuffers_init(obs, count, capacity)) {                    \
-        fprintf(stderr, "Error: Could not initialize OutputBuffers\n"); \
-        return -1;                                                      \
-    }
-
-#define debug_create_buffer(size) char debug_buffer[size]
-#define debug_define_start(name) define_start(name)
-#define debug_end_print(obs, id, buf, str, name)        \
-    timestamp_end(name);                                \
-    print_debug(obs, id, buf, sizeof(buf), "BottomUp_" str, &name)
-
-#define debug_destroy(obs, count)                   \
-    OutputBuffers_flush_single(obs, count, stderr); \
-    OutputBuffers_destroy(obs, count)
-
+#define timestamp_sig  , const size_t id, struct OutputBuffers * timestamp_buffers
 #else
-
-#define debug_init(obs, count, capacity);
-#define debug_create_buffer(size)
-#define debug_define_start(name)
-#define debug_end_print(obs, id, buf, str, name)
-#define debug_destroy(obs, count)
-
+#define timestamp_sig
 #endif
 
 /*
@@ -129,7 +107,8 @@ struct BottomUp {
 
 /* Signature of function for processing */
 /* a directory as the tree is ascending */
-typedef void (*AscendFunc_t)(void * user_struct);
+typedef void (*AscendFunc_t)(void * user_struct
+                             timestamp_sig);
 
 /* Function user should call to walk a tree bottom up in parallel */
 int parallel_bottomup(char ** root_names, size_t root_count,

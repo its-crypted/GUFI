@@ -70,16 +70,23 @@ OF SUCH DAMAGE.
 
 #include "bf.h"
 #include "BottomUp.h"
+#include "debug.h"
 #include "utils.h"
 
 extern int errno;
+
+#if defined(DEBUG) && defined(PER_THREAD_STATS)
+#define timestamp_args , id, timestamp_buffers
+#else
+#define timestamp_args
+#endif
 
 /* Remove all non-subdirectories in the   */
 /* current directory. Then remove itself. */
 /* Subdirectories are already gone, so    */
 /* they don't have to processed at the    */
 /* current level.                         */
-void rm_dir(void * args) {
+void rm_dir(void * args timestamp_sig) {
     struct BottomUp * dir = (struct BottomUp *) args;
 
     char db_name[MAXPATH];
@@ -115,19 +122,18 @@ int main(int argc, char * argv[]) {
     epoch = since_epoch(&now);
     #endif
 
-    struct OutputBuffers debug_buffers;
-    debug_init(&debug_buffers, in.maxthreads + 1, 1024 * 1024);
+    timestamp_init(timestamp_buffers, in.maxthreads + 1, 1024 * 1024, NULL);
 
     const int rc = parallel_bottomup(argv + idx, argc - idx,
                                      in.maxthreads,
                                      sizeof(struct BottomUp), rm_dir,
                                      1
                                      #if defined(DEBUG) && defined(PER_THREAD_STATS)
-                                     , &debug_buffers
+                                     , timestamp_buffers
                                      #endif
         );
 
-    debug_destroy(&debug_buffers, in.maxthreads + 1);
+    timestamp_destroy(timestamp_buffers);
 
     return rc;
 }

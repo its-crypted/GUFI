@@ -81,17 +81,11 @@ struct start_end {
     struct timespec end;
 };
 
-/* these macros are meant to be wrapped with another macro for executable-specific use   */
-/* such as when DEBUG is defined, or if only when DEBUG and PER_THREAD_STATS are defined */
-#define timestamp_start(name)                       \
-    clock_gettime(CLOCK_MONOTONIC, &(name).start);
+#define timestamp_set_start_impl(name)              \
+    clock_gettime(CLOCK_MONOTONIC, &((name).start));
 
-#define timestamp_end(name)                         \
-    clock_gettime(CLOCK_MONOTONIC, &(name).end);
-
-#define define_start(name)  \
-    struct start_end name;  \
-    timestamp_start(name);
+#define timestamp_set_end_impl(name)                \
+    clock_gettime(CLOCK_MONOTONIC, &((name).end));
 
 /* nanoseconds since an unspecified epoch */
 uint64_t since_epoch(struct timespec * ts);
@@ -100,5 +94,77 @@ uint64_t since_epoch(struct timespec * ts);
 long double elapsed(struct start_end * se);
 
 int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const size_t size, const char * name, struct start_end * se);
+
+#ifdef DEBUG
+
+#define timestamp_init(obs, count, capacity, mutex_ptr)                 \
+    struct OutputBuffers obs##_stack;                                   \
+    struct OutputBuffers * obs = &obs##_stack;                          \
+    pthread_mutex_t obs##_static_mutex = PTHREAD_MUTEX_INITIALIZER;     \
+    pthread_mutex_t *obs##_mutex_ptr = mutex_ptr;                       \
+    if (!obs##_mutex_ptr) {                                             \
+        obs##_mutex_ptr = &obs##_static_mutex;                          \
+    }                                                                   \
+    (void) obs##_static_mutex;                                          \
+    if (!OutputBuffers_init(obs, count, capacity, obs##_mutex_ptr)) {   \
+        fprintf(stderr, "Error: Could not initialize OutputBuffers\n"); \
+        return -1;                                                      \
+    }
+
+#define timestamp_get_name(name)                            \
+    name##_ts
+
+#define timestamp_create(name)                              \
+    struct start_end timestamp_get_name(name)
+
+#define timestamp_set_start(name)                           \
+    timestamp_set_start_impl(timestamp_get_name(name))
+
+#define timestamp_start(name)                               \
+    timestamp_create(name);                                 \
+    timestamp_set_start(name)
+
+#define timestamp_set_end(name)                             \
+    timestamp_set_end_impl(timestamp_get_name(name))
+
+/* only print if PER_THREAD_STATS is defined */
+#ifdef PER_THREAD_STATS
+#define timestamp_create_buffer(size) char ts_buf[size]
+
+#define timestamp_print(obs, id, buf, str, name)            \
+    print_timer(obs, id, buf, sizeof(buf),                  \
+                str, &timestamp_get_name(name))
+
+#define timestamp_end(obs, id, buf, str, name)              \
+    timestamp_set_end(name);                                \
+    timestamp_print(obs, id, buf, str, name)
+#else
+#define timestamp_create_buffer(size)
+#define timestamp_print(obs, id, buf, str, name)
+#define timestamp_end(obs, id, buf, str, name)
+#endif
+
+#define timestamp_elapsed(name)                             \
+    elapsed(&timestamp_get_name(name))
+
+#define timestamp_destroy(obs)                              \
+    OutputBuffers_flush_to_single(obs, stderr);             \
+    OutputBuffers_destroy(obs)
+
+#else
+
+#define timestamp_init(obs, count, capacity)
+#define timestamp_get_name(name)
+#define timestamp_create(name)
+#define timestamp_set_start(name)
+#define timestamp_start(name)
+#define timestamp_set_end(name)
+#define timestamp_create_buffer(size)
+#define timestamp_print(obs, id, buf, str, name)
+#define timestamp_end(obs, id, buf, str, name)
+#define timestamp_elapsed(name)
+#define timestamp_destroy(obs, count)
+
+#endif
 
 #endif

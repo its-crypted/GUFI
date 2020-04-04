@@ -150,9 +150,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
     sqlite3 * db = opendb(dbname, RDWR, 1, 0,
                           NULL, NULL
-                          #ifdef DEBUG
-                          , NULL, NULL
-                          , NULL, NULL
+                          #if defined(DEBUG) && defined(PER_THREAD_STATS)
                           , NULL, NULL
                           , NULL, NULL
                           #endif
@@ -453,7 +451,11 @@ int main(int argc, char * argv[]) {
     clock_gettime(CLOCK_MONOTONIC, &benchmark.start);
     #endif
 
-    struct QPTPool * pool = QPTPool_init(in.maxthreads);
+    struct QPTPool * pool = QPTPool_init(in.maxthreads
+                                         #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                                         , NULL
+                                         #endif
+        );
     if (!pool) {
         fprintf(stderr, "Failed to initialize thread pool\n");
         return -1;
