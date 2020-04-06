@@ -102,6 +102,14 @@ struct BottomUp {
     struct sll subdirs;
     struct sll subnondirs;
     struct BottomUp * parent;
+
+    struct {
+        size_t down;
+        size_t up;
+    } tid;
+
+    /* extra arguments available at all times */
+    void * extra_args;
 };
 
 /* Signature of function for processing */
@@ -113,7 +121,8 @@ typedef void (*AscendFunc_t)(void * user_struct
 int parallel_bottomup(char ** root_names, size_t root_count,
                       const size_t thread_count,
                       const size_t user_struct_size, AscendFunc_t func,
-                      const int track_non_dirs
+                      const int track_non_dirs,
+                      void * extra_args
                       #if defined(DEBUG) && defined(PER_THREAD_STATS)
                       , struct OutputBuffers * debug_buffers
                       #endif

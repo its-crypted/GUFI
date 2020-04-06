@@ -95,7 +95,6 @@ struct UserArgs {
     int track_non_dirs;
 
     #if defined(DEBUG) && defined(PER_THREAD_STATS)
-    /* BottomUp Debug OutputBuffers*/
     struct OutputBuffers * timestamp_buffers;
     #else
     void * timestamp_buffers;
@@ -137,6 +136,8 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
     }
 
     /* no subdirectories still need processing, so can attempt to roll up */
+
+    bu->tid.up = id;
 
     /* call user function */
     timestamp_start(run_user_func);
@@ -188,6 +189,8 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 
     struct UserArgs * ua = (struct UserArgs *) args;
     struct BottomUp * bu = (struct BottomUp *) data;
+
+    bu->tid.down = id;
 
     timestamp_start(open_dir);
     DIR * dir = opendir(bu->name);
@@ -261,6 +264,7 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
         sll_loop(&bu->subdirs, node)  {
             struct BottomUp *child = (struct BottomUp *) sll_node_data(node);
             child->parent = bu;
+            child->extra_args = bu->extra_args;
 
             /* keep going down */
             timestamp_start(enqueue_subdir);
@@ -283,16 +287,13 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 int parallel_bottomup(char ** root_names, size_t root_count,
                       const size_t thread_count,
                       const size_t user_struct_size, AscendFunc_t func,
-                      const int track_non_dirs
+                      const int track_non_dirs,
+                      void * extra_args
                       #if defined(DEBUG) && defined(PER_THREAD_STATS)
                       , struct OutputBuffers * timestamp_buffers
                       #endif
     ) {
     struct UserArgs ua;
-
-    #if defined(DEBUG) && defined(PER_THREAD_STATS)
-    ua.timestamp_buffers = timestamp_buffers;
-    #endif
 
     timestamp_create_buffer(4096);
 
@@ -309,6 +310,10 @@ int parallel_bottomup(char ** root_names, size_t root_count,
     ua.user_struct_size = user_struct_size;
     ua.func = func;
     ua.track_non_dirs = track_non_dirs;
+
+    #if defined(DEBUG) && defined(PER_THREAD_STATS)
+    ua.timestamp_buffers = timestamp_buffers;
+    #endif
 
     struct QPTPool * pool = QPTPool_init(thread_count
                                          #if defined(DEBUG) && defined(PER_THREAD_STATS)
@@ -348,6 +353,7 @@ int parallel_bottomup(char ** root_names, size_t root_count,
         }
 
         root->parent = NULL;
+        root->extra_args = extra_args;
 
         timestamp_start(enqueue_root);
         QPTPool_enqueue(pool, i % in.maxthreads, descend_to_bottom, root);
