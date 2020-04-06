@@ -86,10 +86,20 @@ extern int errno;
 
 const char SUBDIR_ATTACH_NAME[] = "subdir";
 
+#ifdef DEBUG
+/* per thread stats */
+struct RollUpStats {
+    /* no need for mutex */
+    size_t not_processed;
+    size_t successful_rollup;
+    size_t failed_rollup;
+    size_t not_rolledup;
+};
+#endif
+
 struct RollUp {
     struct BottomUp data;
     int rolledup;
-    size_t id;
 };
 
 const char PERM_SQL[] = "SELECT mode, uid, gid FROM summary";
@@ -143,6 +153,10 @@ int check_permissions(struct Permissions * curr, struct Permissions * child) {
 int can_rollup(struct RollUp * rollup,
                sqlite3 * dst
                timestamp_sig) {
+    /* if (!rollup || !dst) { */
+    /*     return -1; */
+    /* } */
+
     timestamp_create_buffer(4096);
     timestamp_start(can_roll_up);
 
@@ -351,21 +365,40 @@ void rollup(void * args timestamp_sig) {
     const int opendb_rc = sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE | SQLITE_OPEN_URI, GUFI_SQLITE_VFS);
     timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_curr_db);
 
+    #ifdef DEBUG
+    struct RollUpStats * stats = (struct RollUpStats *) dir->data.extra_args;
+    #endif
+
     if (opendb_rc == SQLITE_OK) {
         if (can_rollup(dir, dst timestamp_args)) {
-
             /* apply database optimizations */
             timestamp_start(optimize_db);
             set_db_pragmas(dst);
             timestamp_end(timestamp_buffers, id, ts_buf, "set_pragmas", optimize_db);
 
-            do_rollup(dir, dst timestamp_args);
+            if (do_rollup(dir, dst timestamp_args) == 0) {
+            #ifdef DEBUG
+                stats[dir->data.tid.up].successful_rollup++;
+            }
+            else {
+                stats[dir->data.tid.up].failed_rollup++;
+            #endif
+            }
         }
+        #ifdef DEBUG
+        else {
+            fprintf(stderr, "%s\n", dir->data.name);
+            stats[dir->data.tid.up].not_rolledup++;
+        }
+        #endif
     }
     else {
-        /* this error message should only be seen if there */
-        /* are directories without database files          */
+        /* this error message should only be seen */
+        /* at directories without database files  */
         fprintf(stderr, "Warning: Could not open database at \"%s\": %s\n", dir->data.name, sqlite3_errmsg(dst));
+        #ifdef DEBUG
+        stats[dir->data.tid.up].not_processed++;
+        #endif
     }
 
     closedb(dst);
@@ -385,20 +418,55 @@ int main(int argc, char * argv[]) {
 
     #if defined(DEBUG) && defined(PER_THREAD_STATS)
     epoch = since_epoch(NULL);
-    #endif
 
     timestamp_init(timestamp_buffers, in.maxthreads + 1, 1024 * 1024);
+    #endif
+
+    void * extra_args = NULL;
+
+    #ifdef DEBUG
+    struct RollUpStats * debug_stats = calloc(in.maxthreads, sizeof(struct RollUpStats));
+    extra_args = debug_stats;
+    #endif
 
     const int rc = parallel_bottomup(argv + idx, argc - idx,
                                      in.maxthreads,
                                      sizeof(struct RollUp), rollup,
-                                     0
+                                     0,
+                                     extra_args
                                      #if defined(DEBUG) && defined(PER_THREAD_STATS)
                                      , timestamp_buffers
                                      #endif
         );
 
+    #ifdef DEBUG
+    size_t not_processed = 0;
+    size_t successful_rollups = 0;
+    size_t failed_rollups = 0;
+    size_t not_rolledup = 0;
+    for(size_t i = 0; i < in.maxthreads; i++) {
+        not_processed      += debug_stats[i].not_processed;
+        successful_rollups += debug_stats[i].successful_rollup;
+        failed_rollups     += debug_stats[i].failed_rollup;
+        not_rolledup       += debug_stats[i].not_rolledup;
+    }
+    free(debug_stats);
+
+    fprintf(stderr, "Directories:\n");
+    fprintf(stderr, "    Not processed:          %zu\n", not_processed);
+    fprintf(stderr, "    Successfully rolled up: %zu\n", successful_rollups);
+    fprintf(stderr, "    Failed to roll up:      %zu\n", failed_rollups);
+    fprintf(stderr, "    Not rolled up:          %zu\n", not_rolledup);
+    fprintf(stderr, "    Total:                  %zu\n", not_processed +
+                                                         successful_rollups +
+                                                         failed_rollups +
+                                                         not_rolledup);
+
+    #ifdef PER_THREAD_STATS
     timestamp_destroy(timestamp_buffers, in.maxthreads + 1);
+    #endif
+
+    #endif
 
     return rc;
 }
