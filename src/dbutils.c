@@ -130,7 +130,7 @@ sqlite3 * attachdb(const char *name, sqlite3 *db, const char *dbn, const OpenMod
   }
 
   if (sqlite3_exec(db, attach, NULL, NULL, NULL) != SQLITE_OK) {
-      fprintf(stderr, "Cannot attach database \"%s\" as \"%s\": %s\n", name, dbn, sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot attach database as \"%s\": %s\n", dbn, sqlite3_errmsg(db));
       return NULL;
   }
 
