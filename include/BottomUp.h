@@ -88,8 +88,7 @@ OF SUCH DAMAGE.
   Structure containing the necessary information
   to traverse a tree upwards.
 
-  This struct should be wrapped by a user struct
-  and should be the first variable.
+  This struct should be wrapped by a user struct.
 
   This struct will likely be directly used by
   the user, so the imeplementation is not opaque.
