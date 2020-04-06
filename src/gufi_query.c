@@ -913,7 +913,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    #if defined(DEBUG) && defined CUMULATIVE_TIMES
+    #if defined(DEBUG) && defined(CUMULATIVE_TIMES)
     debug_end(setup_aggregate);
     const long double setup_aggregate_time = elapsed(&setup_aggregate);
     #endif
