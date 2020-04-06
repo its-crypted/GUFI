@@ -66,6 +66,7 @@ OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "bf.h"
@@ -91,140 +92,244 @@ struct RollUp {
     size_t id;
 };
 
+const char PERM_SQL[] = "SELECT mode, uid, gid FROM summary";
+
+struct Permissions {
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
+};
+
+int get_permissions(void * args, int count, char ** data, char ** columns) {
+    if (count != 3) {
+        return 1;
+    }
+
+    struct Permissions * perms = (struct Permissions *) args;
+
+    perms->mode = atoi(data[0]);
+    perms->uid  = atoi(data[1]);
+    perms->gid  = atoi(data[2]);
+
+    return 0;
+}
+
+int check_permissions(struct Permissions * curr, struct Permissions * child) {
+    return
+        /* self and subdirectories are all o+rx */
+        ((curr->mode & 0005) &&
+         (child->mode & 0005) &&
+         (curr->uid == child->uid) &&
+         (curr->gid == child->gid)) ||
+
+        /* self and subdirectories have same user, group, and others permissions, uid, and gid  */
+        ((curr->mode == child->mode) &&
+         (curr->uid == child->uid) &&
+         (curr->gid == child->gid)) ||
+
+        /* self and subdirectories have same user and group permissions, o-rx, uid, and gid */
+        (((curr->mode & 0770) == (child->mode & 0770)) &&
+         !(child->mode & 0005) &&
+         (curr->uid == child->uid) &&
+         (curr->gid == child->gid)) ||
+
+        /* self and subdirectories have same user permissions, go-rx, uid */
+        (((curr->mode & 0700) == (child->mode & 0700)) &&
+         !(child->mode & 0055) &&
+         (curr->uid == child->uid));
+}
+
 /* check if the current directory can be rolled up */
-int can_rollup(struct RollUp * rollup timestamp_sig) {
+int can_rollup(struct RollUp * rollup,
+               sqlite3 * dst
+               timestamp_sig) {
     timestamp_create_buffer(4096);
     timestamp_start(can_roll_up);
-    /* ********************* */
-    /* need more checks here */
-    /* ********************* */
+
+    /* default to cannot roll up */
+    int legal = 0;
+
+    /* all subdirectories are expected to pass */
+    size_t total_subdirs = 0;
 
     /* check if subdirectories have been rolled up */
     timestamp_start(check_subdirs_rolledup);
-    size_t total = 0;
     size_t rolledup = 0;
     sll_loop(&rollup->data.subdirs, node) {
         struct RollUp * child = (struct RollUp *) sll_node_data(node);
         rolledup += child->rolledup;
-        total++;
+        total_subdirs++;
     }
     timestamp_end(timestamp_buffers, id, ts_buf, "check_subdirs_rolledup", check_subdirs_rolledup);
 
+    if (!(legal = (total_subdirs == rolledup))) {
+        /* no error message since this isn't a full blown error */
+        goto end_can_rollup;
+    }
+
+    char * err = NULL;
+    int exec_rc = SQLITE_OK;
+
+    /* get permissions of the current directory */
+    struct Permissions perms;
+    timestamp_start(get_perms);
+    exec_rc = sqlite3_exec(dst, PERM_SQL, get_permissions, &perms, &err);
+    timestamp_end(timestamp_buffers, id, ts_buf, "get_perms", get_perms);
+
+    if (exec_rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Could not get permissions of current directory \"%s\": %s\n", rollup->data.name, err);
+        legal = 0;
+        goto end_can_rollup;
+    }
+
+    /* check the permissions of each child directory */
+    /* roll up is only possible if all subdirectories are rolled up */
+    size_t good_perms = 0;
+    sll_loop(&rollup->data.subdirs, node) {
+        struct RollUp * child = (struct RollUp *) sll_node_data(node);
+
+        char dbname[MAXPATH];
+        SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, child->data.name);
+
+        timestamp_start(open_child_db);
+        sqlite3 * db = opendb(dbname, RDONLY, 1, 0
+                              , NULL, NULL
+                              #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                              , NULL, NULL
+                              , NULL, NULL
+                              #endif
+            );
+        timestamp_end(timestamp_buffers, id, ts_buf, "open_child_db", open_child_db);
+
+        if (!db) {
+            fprintf(stderr, "Error: Could not open database file in  \"%s\": %s\n", child->data.name, sqlite3_errmsg(db));
+            closedb(db);
+            break;
+        }
+
+        /* get the child directory's permissions and */
+        /* compare them with the current directory   */
+        struct Permissions child_perms;
+        timestamp_start(get_child_perms);
+        exec_rc = sqlite3_exec(db, PERM_SQL, get_permissions, &child_perms, &err);
+        timestamp_end(timestamp_buffers, id, ts_buf, "get_child_perms", get_child_perms);
+
+        if (exec_rc != SQLITE_OK) {
+            fprintf(stderr, "Error: Could not get permissions of child directory \"%s\": %s\n", child->data.name, err);
+            break;
+        }
+
+        timestamp_start(check_perms);
+        const int p = check_permissions(&perms, &child_perms);
+        good_perms += p;
+        timestamp_end(timestamp_buffers, id, ts_buf, "check_perms", check_perms);
+
+        closedb(db);
+    }
+
+    sqlite3_free(err);
+
+    /* if any subdirectory permissions were */
+    /* not good, this rollup is not legal   */
+    legal = (total_subdirs == good_perms);
+
+end_can_rollup:
     timestamp_end(timestamp_buffers, id, ts_buf, "can_rollup", can_roll_up);
 
-    return (total == rolledup);
+    return legal;
 }
 
 /*
-< 0 - could not open database
+< 0 - bad arguments
   0 - success
 > 0 - number of subdirectories that failed to be moved
 */
-int do_rollup(struct RollUp * rollup timestamp_sig) {
+int do_rollup(struct RollUp * rollup,
+              sqlite3 *dst
+              timestamp_sig) {
     /* assume that this directory can be rolled up */
     /* can_rollup should have been called earlier  */
+
+    /* if (!rollup || !dst) { */
+    /*     return -1; */
+    /* } */
 
     timestamp_create_buffer(4096);
     timestamp_start(do_roll_up);
 
     int rc = 0;
 
-    char dbname[MAXPATH];
-    SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, rollup->data.name);
+    /* keep track of failed roll ups */
+    int failed_rollup = 0;
 
-    /* if there is no database file in this directory, don't create one         */
-    /* don't use opendb to avoid creating a new database file and hiding errors */
-    timestamp_start(open_db);
-    sqlite3 * dst = NULL;
-    const int opendb_rc = sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE, GUFI_SQLITE_VFS);
-    timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_db);
+    /* process each subdirectory */
+    timestamp_start(rollup_subdirs);
+    sll_loop(&rollup->data.subdirs, node) {
+        timestamp_start(rollup_subdir);
 
-    if (opendb_rc == SQLITE_OK) {
-        /* apply database optimizations */
-        timestamp_start(optimize_db);
-        set_db_pragmas(dst);
-        timestamp_end(timestamp_buffers, id, ts_buf, "set_pragmas", optimize_db);
+        struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
 
-        /* keep track of failed roll ups */
-        int failed_rollup = 0;
+        /* save this separately for remove */
+        char child_db_name[MAXPATH];
+        SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->name);
 
-        /* process each subdirectory */
-        timestamp_start(rollup_subdirs);
-        sll_loop(&rollup->data.subdirs, node) {
-            timestamp_start(rollup_subdir);
+        size_t child_failed = 0;
 
-            struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
-
-            /* save this separately for remove */
-            char child_db_name[MAXPATH];
-            SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->name);
-
-            size_t child_failed = 0;
-
-            /* attach subdir */
-            {
-                if (!attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY)) {
-                    child_failed = 1;
-                }
+        /* attach subdir */
+        {
+            if (!attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, RDONLY)) {
+                child_failed = 1;
             }
-
-            /* copy all entries rows */
-            /* this query will fail if the child's summary table is empty */
-            if (!child_failed) {
-                char copy[MAXSQL];
-                sqlite3_snprintf(MAXSQL, copy, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM %s.summary as s, %s.entries as e", SUBDIR_ATTACH_NAME, SUBDIR_ATTACH_NAME);
-
-                char * err = NULL;
-                if (sqlite3_exec(dst, copy, NULL, NULL, &err) != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to copy rows from \"%s\" to \"%s\": %s\n", child->name, rollup->data.name, err);
-                    child_failed = 1;
-                }
-                sqlite3_free(err);
-                err = NULL;
-            }
-
-            /* probably want to update summary table */
-
-            /* detach subdir */
-            {
-                /* ignore errors - next attach will fail */
-                detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
-            }
-
-            failed_rollup += child_failed;
-
-            /* if the roll up succeeded, remove the child database and directory */
-            if (!child_failed) {
-                if (unlink(child_db_name) != 0) {
-                    fprintf(stderr, "Warning: Failed to delete \"%s\": %s\n", child_db_name, strerror(errno));
-                }
-
-                if (rmdir(child->name) != 0) {
-                    fprintf(stderr, "Warning: Failed to remove \"%s\": %s\n", child->name, strerror(errno));
-                }
-
-                /* either of these failing leaves unneeded filesystem */
-                /* entries but does not affect the roll up status     */
-            }
-            timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
         }
-        timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdirs", rollup_subdirs);
 
-        if (failed_rollup) {
-            rc = (int) failed_rollup;
+        /* copy all entries rows */
+        /* this query will fail if the child's summary table is empty */
+        if (!child_failed) {
+            char copy[MAXSQL];
+            sqlite3_snprintf(MAXSQL, copy, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM %s.summary as s, %s.entries as e", SUBDIR_ATTACH_NAME, SUBDIR_ATTACH_NAME);
+
+            char * err = NULL;
+            if (sqlite3_exec(dst, copy, NULL, NULL, &err) != SQLITE_OK) {
+                fprintf(stderr, "Error: Failed to copy rows from \"%s\" to \"%s\": %s\n", child->name, rollup->data.name, err);
+                child_failed = 1;
+            }
+            sqlite3_free(err);
+            err = NULL;
         }
-        else {
-            rollup->rolledup = 1;
+
+        /* probably want to update summary table */
+
+        /* always detach subdir */
+        {
+            /* ignore errors - next attach will fail */
+            detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
         }
+
+        failed_rollup += child_failed;
+
+        /* if the roll up succeeded, remove the child database and directory */
+        if (!child_failed) {
+            if (unlink(child_db_name) != 0) {
+                fprintf(stderr, "Warning: Failed to delete \"%s\": %s\n", child_db_name, strerror(errno));
+            }
+
+            if (rmdir(child->name) != 0) {
+                fprintf(stderr, "Warning: Failed to remove \"%s\": %s\n", child->name, strerror(errno));
+            }
+
+            /* either of these failing leaves unneeded filesystem */
+            /* entries but does not affect the roll up status     */
+        }
+        timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
+    }
+    timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdirs", rollup_subdirs);
+
+    if (failed_rollup) {
+        rc = (int) failed_rollup;
     }
     else {
-        /* this error message should only be seen if there are        */
-        /* directories without database files at the top of the index */
-        fprintf(stderr, "Warning: Could not open database at \"%s\": %s\n", rollup->data.name, sqlite3_errmsg(dst));
-        rc = -1;
+        rollup->rolledup = 1;
     }
-
-    closedb(dst);
 
     timestamp_end(timestamp_buffers, id, ts_buf, "do_rollup", do_roll_up);
     return rc;
@@ -233,9 +338,37 @@ int do_rollup(struct RollUp * rollup timestamp_sig) {
 void rollup(void * args timestamp_sig) {
     struct RollUp * dir = (struct RollUp *) args;
     dir->rolledup = 0;
-    if (can_rollup(dir timestamp_args)) {
-        do_rollup(dir timestamp_args);
+
+    timestamp_create_buffer(4096);
+
+    char dbname[MAXPATH];
+    SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, dir->data.name);
+
+    /* open the database file here to reduce number of open calls */
+    /* don't use opendb to avoid creating a new database file     */
+    timestamp_start(open_curr_db);
+    sqlite3 * dst = NULL;
+    const int opendb_rc = sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE | SQLITE_OPEN_URI, GUFI_SQLITE_VFS);
+    timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_curr_db);
+
+    if (opendb_rc == SQLITE_OK) {
+        if (can_rollup(dir, dst timestamp_args)) {
+
+            /* apply database optimizations */
+            timestamp_start(optimize_db);
+            set_db_pragmas(dst);
+            timestamp_end(timestamp_buffers, id, ts_buf, "set_pragmas", optimize_db);
+
+            do_rollup(dir, dst timestamp_args);
+        }
     }
+    else {
+        /* this error message should only be seen if there */
+        /* are directories without database files          */
+        fprintf(stderr, "Warning: Could not open database at \"%s\": %s\n", dir->data.name, sqlite3_errmsg(dst));
+    }
+
+    closedb(dst);
 }
 
 void sub_help() {
