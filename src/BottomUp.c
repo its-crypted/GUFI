@@ -137,7 +137,9 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
 
     /* no subdirectories still need processing, so can attempt to roll up */
 
+    #ifdef DEBUG
     bu->tid.up = id;
+    #endif
 
     /* call user function */
     timestamp_start(run_user_func);
@@ -190,7 +192,9 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
     struct UserArgs * ua = (struct UserArgs *) args;
     struct BottomUp * bu = (struct BottomUp *) data;
 
+    #ifdef DEBUG
     bu->tid.down = id;
+    #endif
 
     timestamp_start(open_dir);
     DIR * dir = opendir(bu->name);
@@ -368,8 +372,10 @@ int parallel_bottomup(char ** root_names, size_t root_count,
     /* clean up root directories since they don't get freed during processing */
     free(roots);
 
+    #ifdef DEBUG
     const size_t threads_ran = QPTPool_threads_completed(pool);
-    fprintf(stdout, "Ran %zu threads\n", threads_ran);
+    fprintf(stderr, "Ran %zu threads\n", threads_ran);
+    #endif
 
     QPTPool_destroy(pool);
 
