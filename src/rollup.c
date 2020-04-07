@@ -197,17 +197,17 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
                       (curr->gid == child_perms[i].gid));
 
         /* self and subdirectories have same user, group, and others permissions, uid, and gid */
-        ugo += ((curr->mode == child_perms[i].mode) &&
+        ugo += (((curr->mode & 0555) == (child_perms[i].mode & 0555)) &&
                 (curr->uid == child_perms[i].uid) &&
                 (curr->gid == child_perms[i].gid));
 
         /* self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx */
-        ug += (((curr->mode & 0770) == (child_perms[i].mode & 0770)) &&
+        ug += (((curr->mode & 0550) == (child_perms[i].mode & 0550)) &&
                 (curr->uid == child_perms[i].uid) &&
                 (curr->gid == child_perms[i].gid));
 
         /* self and subdirectories have same user permissions, go-rx, uid */
-        u += (((curr->mode & 0700) == (child_perms[i].mode & 0700)) &&
+        u += (((curr->mode & 0500) == (child_perms[i].mode & 0500)) &&
               !(child_perms[i].mode & 0055) &&
               (curr->uid == child_perms[i].uid));
 
