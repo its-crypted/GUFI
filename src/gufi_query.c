@@ -509,13 +509,13 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     if (gts.outdbd[id]) {
       /* if we have an out db then only have to attach the gufi db */
       db = gts.outdbd[id];
-      if (!attachdb(dbname, db, "tree", in.open_mode)) {
+      if (!attachdb(dbname, db, "tree", in.open_flags)) {
           goto close_dir;
       }
     }
     else {
       /* otherwise, open a standalone database to query from */
-      db = opendb(dbname, in.open_mode, 1, 1,
+      db = opendb(dbname, in.open_flags, 1, 1,
                   NULL, NULL
                   #if defined(DEBUG) && defined(PER_THREAD_STATS)
                   , &sqlite3_open_call, &create_tables_call
@@ -786,7 +786,8 @@ static sqlite3 *aggregate_init(const char *AGGREGATE_NAME_TEMPLATE,
     for(int i = 0; i < in.maxthreads; i++) {
         char intermediate_name[MAXSQL];
         SNPRINTF(intermediate_name, MAXSQL, AGGREGATE_NAME, (int) i);
-        if (!(gts.outdbd[i] = opendb(intermediate_name, RDWR, 1, 1, NULL, NULL
+        if (!(gts.outdbd[i] = opendb(intermediate_name, SQLITE_OPEN_READWRITE, 1, 1
+                                     , NULL, NULL
                                      #if defined(DEBUG) && defined(PER_THREAD_STATS)
                                      , NULL, NULL
                                      , NULL, NULL
@@ -809,7 +810,8 @@ static sqlite3 *aggregate_init(const char *AGGREGATE_NAME_TEMPLATE,
 
     SNPRINTF(aggregate_name, MAXSQL, AGGREGATE_NAME, (int) -1);
     sqlite3 *aggregate = NULL;
-    if (!(aggregate = opendb(aggregate_name, RDWR, 1, 1, NULL, NULL
+    if (!(aggregate = opendb(aggregate_name, SQLITE_OPEN_READWRITE, 1, 1
+                             , NULL, NULL
                              #if defined(DEBUG) && defined(PER_THREAD_STATS)
                              , NULL, NULL
                              , NULL, NULL
@@ -1007,8 +1009,8 @@ int main(int argc, char *argv[])
 
         /* aggregate the intermediate results */
         for(int i = 0; i < in.maxthreads; i++) {
-            if (!attachdb(aggregate_name, gts.outdbd[i], AGGREGATE_ATTACH_NAME, RDWR)         ||
-                (sqlite3_exec(gts.outdbd[i], in.intermediate, NULL, NULL, NULL) != SQLITE_OK)) {
+            if (!attachdb(aggregate_name, gts.outdbd[i], AGGREGATE_ATTACH_NAME, SQLITE_OPEN_READWRITE) ||
+                (sqlite3_exec(gts.outdbd[i], in.intermediate, NULL, NULL, NULL) != SQLITE_OK))          {
                 fprintf(stderr, "Aggregation of intermediate databases error: %s\n", sqlite3_errmsg(gts.outdbd[i]));
             }
         }

@@ -147,8 +147,8 @@ int main(int argc, char *argv[])
 
 
      // run the query
-     db = opendb(dbname, RDONLY, 1, 1,
-                 NULL, NULL
+     db = opendb(dbname, SQLITE_OPEN_READONLY, 1, 1
+                 , NULL, NULL
                  #if defined(DEBUG) && defined(PER_THREAD_STATS)
                  , NULL, NULL
                  , NULL, NULL

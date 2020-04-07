@@ -148,8 +148,8 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         return 1;
     }
 
-    sqlite3 * db = opendb(dbname, RDWR, 1, 0,
-                          NULL, NULL
+    sqlite3 * db = opendb(dbname, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 1, 0
+                          , NULL, NULL
                           #if defined(DEBUG) && defined(PER_THREAD_STATS)
                           , NULL, NULL
                           , NULL, NULL

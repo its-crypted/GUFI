@@ -206,7 +206,7 @@ int can_rollup(struct RollUp * rollup,
         SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, child->data.name);
 
         timestamp_start(open_child_db);
-        sqlite3 * db = opendb(dbname, RDONLY, 1, 0
+        sqlite3 * db = opendb(dbname, SQLITE_OPEN_READONLY, 1, 0
                               , NULL, NULL
                               #if defined(DEBUG) && defined(PER_THREAD_STATS)
                               , NULL, NULL
@@ -291,7 +291,7 @@ int do_rollup(struct RollUp * rollup,
 
         /* attach subdir */
         {
-            if (!attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, RDONLY)) {
+            if (!attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY)) {
                 child_failed = 1;
             }
         }
@@ -359,23 +359,23 @@ void rollup(void * args timestamp_sig) {
     SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, dir->data.name);
 
     /* open the database file here to reduce number of open calls */
-    /* don't use opendb to avoid creating a new database file     */
     timestamp_start(open_curr_db);
-    sqlite3 * dst = NULL;
-    const int opendb_rc = sqlite3_open_v2(dbname, &dst, SQLITE_OPEN_READWRITE | SQLITE_OPEN_URI, GUFI_SQLITE_VFS);
+    sqlite3 * dst = opendb(dbname, SQLITE_OPEN_READWRITE, 1, 0
+                           , NULL, NULL
+                           #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                           , NULL, NULL
+                           , NULL, NULL
+                           #endif
+        );
+
     timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_curr_db);
 
     #ifdef DEBUG
     struct RollUpStats * stats = (struct RollUpStats *) dir->data.extra_args;
     #endif
 
-    if (opendb_rc == SQLITE_OK) {
+    if (dst) {
         if (can_rollup(dir, dst timestamp_args)) {
-            /* apply database optimizations */
-            timestamp_start(optimize_db);
-            set_db_pragmas(dst);
-            timestamp_end(timestamp_buffers, id, ts_buf, "set_pragmas", optimize_db);
-
             if (do_rollup(dir, dst timestamp_args) == 0) {
             #ifdef DEBUG
                 stats[dir->data.tid.up].successful_rollup++;
@@ -387,7 +387,6 @@ void rollup(void * args timestamp_sig) {
         }
         #ifdef DEBUG
         else {
-            fprintf(stderr, "%s\n", dir->data.name);
             stats[dir->data.tid.up].not_rolledup++;
         }
         #endif

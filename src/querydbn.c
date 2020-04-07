@@ -153,12 +153,12 @@ int main(int argc, char *argv[])
 
 
    //printf("processing query name %s  numb dbs %d\n",name, numdbs);
-   if (!(db = opendb(name, RDWR, 1, 1,
-               NULL, NULL
-               #if defined(DEBUG) && defined(PER_THREAD_STATS)
-               , NULL, NULL
-               , NULL, NULL
-               #endif
+   if (!(db = opendb(name, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 1, 1
+                     , NULL, NULL
+                     #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                     , NULL, NULL
+                     , NULL, NULL
+                     #endif
              ))) {
        fprintf(stderr, "Error: Unable to create database file \"%s\".\n", name);
        return -1;

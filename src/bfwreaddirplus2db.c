@@ -196,8 +196,8 @@ int reprocessdir(void * passv, DIR *dir)
           truncate(dbpath,0);
         }
     }
-    if (!(db = opendb(dbpath, RDWR, 1, 1,
-                      create_tables, NULL
+    if (!(db = opendb(dbpath, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 1, 1
+                      , create_tables, NULL
                       #if defined(DEBUG) && defined(PER_THREAD_STATS)
                       , NULL, NULL
                       , NULL, NULL
@@ -609,8 +609,8 @@ int processinit(struct QPTPool * ctx) {
        i=0;
        while (i < in.maxthreads) {
            SNPRINTF(outdbn,MAXPATH,"%s.%d",in.outdbn,i);
-           gts.outdbd[i]=opendb(outdbn, RDWR, 1, 1,
-                                create_readdirplus_tables, NULL
+           gts.outdbd[i]=opendb(outdbn, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 1, 1
+                                , create_readdirplus_tables, NULL
                                 #if defined(DEBUG) && defined(PER_THREAD_STATS)
                                 , NULL, NULL
                                 , NULL, NULL

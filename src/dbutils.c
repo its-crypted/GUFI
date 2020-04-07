@@ -74,7 +74,7 @@ OF SUCH DAMAGE.
 
 extern int errno;
 
-const char GUFI_SQLITE_VFS[] = "unix-none";
+static const char GUFI_SQLITE_VFS[] = "unix-none";
 
 char *rsql = // "DROP TABLE IF EXISTS readdirplus;"
             "CREATE TABLE readdirplus(path TEXT, type TEXT, inode INT64 PRIMARY KEY, pinode INT64, suspect INT64);";
@@ -113,16 +113,16 @@ char *vtssqlgroup = "DROP VIEW IF EXISTS vtsummarygroup;"
 
 
 
-sqlite3 * attachdb(const char *name, sqlite3 *db, const char *dbn, const OpenMode mode)
+sqlite3 * attachdb(const char *name, sqlite3 *db, const char *dbn, const int flags)
 {
   char attach[MAXSQL];
-  if (mode == RDONLY) {
+  if (flags & SQLITE_OPEN_READONLY) {
       if (!sqlite3_snprintf(MAXSQL, attach, "ATTACH 'file:%q?mode=ro' AS %Q", name, dbn)) {
           fprintf(stderr, "Cannot create ATTACH command\n");
           return NULL;
       }
   }
-  else if (mode == RDWR) {
+  else if (flags & SQLITE_OPEN_READWRITE) {
       if (!sqlite3_snprintf(MAXSQL, attach, "ATTACH %Q AS %Q", name, dbn)) {
           fprintf(stderr, "Cannot create ATTACH command\n");
           return NULL;
@@ -221,7 +221,7 @@ int set_db_pragmas(sqlite3 * db) {
 #define check_set_end(name)
 #endif
 
-sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, const int load_extensions,
+sqlite3 * opendb(const char * name, int flags, const int setpragmas, const int load_extensions,
                  int (*modifydb_func)(const char * name, sqlite3 * db, void * args), void * modifydb_args
                  #if defined(DEBUG) && defined(PER_THREAD_STATS)
                  , struct start_end * sqlite3_open,   struct start_end * set_pragmas
@@ -231,15 +231,7 @@ sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, c
     sqlite3 * db = NULL;
 
     check_set_start(sqlite3_open);
-    int flags = SQLITE_OPEN_URI;
-    if (mode == RDONLY) {
-        flags |= SQLITE_OPEN_READONLY;
-    }
-    else {
-        flags |= SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE;
-    }
-
-    if (sqlite3_open_v2(name, &db, flags, GUFI_SQLITE_VFS) != SQLITE_OK) {
+    if (sqlite3_open_v2(name, &db, flags | SQLITE_OPEN_URI, GUFI_SQLITE_VFS) != SQLITE_OK) {
         check_set_end(sqlite3_open);
         /* fprintf(stderr, "Cannot open database: %s %s rc %d\n", name, sqlite3_errmsg(db), sqlite3_errcode(db)); */
         sqlite3_close(db); /* close db even if it didn't open to avoid memory leaks */

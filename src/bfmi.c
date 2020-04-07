@@ -159,8 +159,8 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args)
        zeroit(&summary);
        char dbname[MAXPATH];
        SNPRINTF(dbname, MAXPATH, "%s/%s", passmywork->name, DBNAME);
-       db = opendb(dbname, RDWR, 1, 1,
-                   create_tables, NULL
+       db = opendb(dbname, SQLITE_OPEN_READWRITE, 1, 1
+                   , create_tables, NULL
                    #if defined(DEBUG) && defined(PER_THREAD_STATS)
                    , NULL, NULL
                    , NULL, NULL
