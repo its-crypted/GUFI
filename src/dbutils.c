@@ -233,7 +233,9 @@ sqlite3 * opendb(const char * name, int flags, const int setpragmas, const int l
     check_set_start(sqlite3_open);
     if (sqlite3_open_v2(name, &db, flags | SQLITE_OPEN_URI, GUFI_SQLITE_VFS) != SQLITE_OK) {
         check_set_end(sqlite3_open);
-        /* fprintf(stderr, "Cannot open database: %s %s rc %d\n", name, sqlite3_errmsg(db), sqlite3_errcode(db)); */
+        if (!(flags | SQLITE_OPEN_CREATE)) {
+            fprintf(stderr, "Cannot open database: %s %s rc %d\n", name, sqlite3_errmsg(db), sqlite3_errcode(db));
+        }
         sqlite3_close(db); /* close db even if it didn't open to avoid memory leaks */
         return NULL;
     }
