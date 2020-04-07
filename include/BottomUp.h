@@ -103,13 +103,15 @@ struct BottomUp {
     struct sll subnondirs;
     struct BottomUp * parent;
 
+    /* extra arguments available at all times */
+    void * extra_args;
+
+    #ifdef DEBUG
     struct {
         size_t down;
         size_t up;
     } tid;
-
-    /* extra arguments available at all times */
-    void * extra_args;
+    #endif
 };
 
 /* Signature of function for processing */
