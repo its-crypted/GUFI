@@ -364,19 +364,6 @@ int do_rollup(struct RollUp * rollup,
 
         failed_rollup += child_failed;
 
-        /* if the roll up succeeded, remove the child database and directory */
-        if (!child_failed) {
-            if (unlink(child_db_name) != 0) {
-                fprintf(stderr, "Warning: Failed to delete \"%s\": %s\n", child_db_name, strerror(errno));
-            }
-
-            if (rmdir(child->name) != 0) {
-                fprintf(stderr, "Warning: Failed to remove \"%s\": %s\n", child->name, strerror(errno));
-            }
-
-            /* either of these failing leaves unneeded filesystem */
-            /* entries but does not affect the roll up status     */
-        }
         timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
     }
     timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdirs", rollup_subdirs);
