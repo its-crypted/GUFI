@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
        curr += SNPRINTF(curr, MAXSQL, " SELECT * FROM %s.%s UNION ALL", dbn, tablename);
 
        // attach individual database files
-       if (!attachdb(argv[idx], db, dbn, RDONLY)) {
+       if (!attachdb(argv[idx], db, dbn, SQLITE_OPEN_READONLY)) {
            rc = 1;
            goto detach;
        }

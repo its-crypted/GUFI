@@ -90,9 +90,7 @@ extern char *vtssqldir;
 extern char *vtssqluser;
 extern char *vtssqlgroup;
 
-extern const char GUFI_SQLITE_VFS[];
-
-sqlite3 * attachdb(const char *name, sqlite3 *db, const char *dbn, const OpenMode mode);
+sqlite3 * attachdb(const char *name, sqlite3 *db, const char *dbn, const int flags);
 
 sqlite3 * detachdb(const char *name, sqlite3 *db, const char *dbn);
 
@@ -100,7 +98,7 @@ int create_table_wrapper(const char *name, sqlite3 * db, const char * sql_name, 
 
 int set_db_pragmas(sqlite3 * db);
 
-sqlite3 * opendb(const char * name, const OpenMode mode, const int setpragmas, const int load_extensions,
+sqlite3 * opendb(const char * name, int flags, const int setpragmas, const int load_extensions,
                  int (*modifydb_func)(const char * name, sqlite3 * db, void * args), void * modifydb_args
                  #if defined(DEBUG) && defined(PER_THREAD_STATS)
                  , struct start_end * sqlite3_open,   struct start_end * set_pragmas
