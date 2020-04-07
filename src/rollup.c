@@ -124,82 +124,22 @@ int get_permissions(void * args, int count, char ** data, char ** columns) {
     return 0;
 }
 
-int check_permissions(struct Permissions * curr, struct Permissions * child) {
-    return
-        /* self and subdirectories are all o+rx */
-        ((curr->mode & 0005) &&
-         (child->mode & 0005) &&
-         (curr->uid == child->uid) &&
-         (curr->gid == child->gid)) ||
-
-        /* self and subdirectories have same user, group, and others permissions, uid, and gid  */
-        ((curr->mode == child->mode) &&
-         (curr->uid == child->uid) &&
-         (curr->gid == child->gid)) ||
-
-        /* self and subdirectories have same user and group permissions, o-rx, uid, and gid */
-        (((curr->mode & 0770) == (child->mode & 0770)) &&
-         !(child->mode & 0005) &&
-         (curr->uid == child->uid) &&
-         (curr->gid == child->gid)) ||
-
-        /* self and subdirectories have same user permissions, go-rx, uid */
-        (((curr->mode & 0700) == (child->mode & 0700)) &&
-         !(child->mode & 0055) &&
-         (curr->uid == child->uid));
-}
-
-/* check if the current directory can be rolled up */
-int can_rollup(struct RollUp * rollup,
-               sqlite3 * dst
-               timestamp_sig) {
-    /* if (!rollup || !dst) { */
-    /*     return -1; */
-    /* } */
-
+/*
+@return -1 - failed to open a database
+         0 - do not roll up
+         1 - self and subdirectories are all o+rx
+         2 - self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx
+         3 - self and subdirectories have same user permissions, go-rx, uid
+         4 - self and subdirectories have same user, group, and others permissions, uid, and gid
+*/
+int check_permissions(struct Permissions * curr, const size_t child_count, struct sll * child_list timestamp_sig) {
     timestamp_create_buffer(4096);
-    timestamp_start(can_roll_up);
 
-    /* default to cannot roll up */
-    int legal = 0;
+    struct Permissions * child_perms = malloc(sizeof(struct Permissions) * sll_get_size(child_list));
+    size_t idx = 0;
 
-    /* all subdirectories are expected to pass */
-    size_t total_subdirs = 0;
-
-    /* check if subdirectories have been rolled up */
-    timestamp_start(check_subdirs_rolledup);
-    size_t rolledup = 0;
-    sll_loop(&rollup->data.subdirs, node) {
-        struct RollUp * child = (struct RollUp *) sll_node_data(node);
-        rolledup += child->rolledup;
-        total_subdirs++;
-    }
-    timestamp_end(timestamp_buffers, id, ts_buf, "check_subdirs_rolledup", check_subdirs_rolledup);
-
-    if (!(legal = (total_subdirs == rolledup))) {
-        /* no error message since this isn't a full blown error */
-        goto end_can_rollup;
-    }
-
-    char * err = NULL;
-    int exec_rc = SQLITE_OK;
-
-    /* get permissions of the current directory */
-    struct Permissions perms;
-    timestamp_start(get_perms);
-    exec_rc = sqlite3_exec(dst, PERM_SQL, get_permissions, &perms, &err);
-    timestamp_end(timestamp_buffers, id, ts_buf, "get_perms", get_perms);
-
-    if (exec_rc != SQLITE_OK) {
-        fprintf(stderr, "Error: Could not get permissions of current directory \"%s\": %s\n", rollup->data.name, err);
-        legal = 0;
-        goto end_can_rollup;
-    }
-
-    /* check the permissions of each child directory */
-    /* roll up is only possible if all subdirectories are rolled up */
-    size_t good_perms = 0;
-    sll_loop(&rollup->data.subdirs, node) {
+    /* get permissions of each child */
+    sll_loop(child_list, node) {
         struct RollUp * child = (struct RollUp *) sll_node_data(node);
 
         char dbname[MAXPATH];
@@ -216,47 +156,150 @@ int can_rollup(struct RollUp * rollup,
         timestamp_end(timestamp_buffers, id, ts_buf, "open_child_db", open_child_db);
 
         if (!db) {
-            fprintf(stderr, "Error: Could not open database file in  \"%s\": %s\n", child->data.name, sqlite3_errmsg(db));
-            closedb(db);
             break;
         }
 
-        /* get the child directory's permissions and */
-        /* compare them with the current directory   */
-        struct Permissions child_perms;
+        /* get the child directory's permissions */
         timestamp_start(get_child_perms);
-        exec_rc = sqlite3_exec(db, PERM_SQL, get_permissions, &child_perms, &err);
+        char * err = NULL;
+        const int exec_rc = sqlite3_exec(db, PERM_SQL, get_permissions, &child_perms[idx], &err);
         timestamp_end(timestamp_buffers, id, ts_buf, "get_child_perms", get_child_perms);
+
+        timestamp_start(close_child_db);
+        closedb(db);
+        timestamp_end(timestamp_buffers, id, ts_buf, "close_child_db", close_child_db);
 
         if (exec_rc != SQLITE_OK) {
             fprintf(stderr, "Error: Could not get permissions of child directory \"%s\": %s\n", child->data.name, err);
+
+            sqlite3_free(err);
             break;
         }
 
-        timestamp_start(check_perms);
-        const int p = check_permissions(&perms, &child_perms);
-        good_perms += p;
-        timestamp_end(timestamp_buffers, id, ts_buf, "check_perms", check_perms);
+        sqlite3_free(err);
 
-        closedb(db);
+        idx++;
+    }
+
+    if (child_count != idx) {
+        return -1;
+    }
+
+    size_t o_plus_rx = 0;
+    size_t ugo = 0;
+    size_t ug = 0;
+    size_t u = 0;
+    for(size_t i = 0; i < child_count; i++) {
+        /* self and subdirectories are all o+rx */
+        o_plus_rx += ((curr->mode & 0005) &&
+                      (child_perms[i].mode & 0005) &&
+                      (curr->uid == child_perms[i].uid) &&
+                      (curr->gid == child_perms[i].gid));
+
+        /* self and subdirectories have same user, group, and others permissions, uid, and gid */
+        ugo += ((curr->mode == child_perms[i].mode) &&
+                (curr->uid == child_perms[i].uid) &&
+                (curr->gid == child_perms[i].gid));
+
+        /* self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx */
+        ug += (((curr->mode & 0770) == (child_perms[i].mode & 0770)) &&
+                (curr->uid == child_perms[i].uid) &&
+                (curr->gid == child_perms[i].gid));
+
+        /* self and subdirectories have same user permissions, go-rx, uid */
+        u += (((curr->mode & 0700) == (child_perms[i].mode & 0700)) &&
+              !(child_perms[i].mode & 0055) &&
+              (curr->uid == child_perms[i].uid));
+
+    }
+
+    if (o_plus_rx == idx) {
+      return 1;
+    }
+
+    if (ugo == idx) {
+      return 4;
+    }
+
+    if (ug == idx) {
+      return 2;
+    }
+
+    if (u == idx) {
+      return 3;
+    }
+
+    return 0;
+}
+
+/* check if the current directory can be rolled up */
+/*
+@return   0 - cannot rollup
+        > 0 - rollup score
+*/
+int can_rollup(struct RollUp * rollup,
+               sqlite3 * dst
+               timestamp_sig) {
+    /* if (!rollup || !dst) { */
+    /*     return -1; */
+    /* } */
+
+    timestamp_create_buffer(4096);
+    timestamp_start(can_roll_up);
+
+    /* default to cannot roll up */
+    int legal = 0;
+
+    /* all subdirectories are expected to pass */
+    size_t total_subdirs = 0;
+
+    /* check if ALL subdirectories have been rolled up */
+    timestamp_start(check_subdirs_rolledup);
+    size_t rolledup = 0;
+    sll_loop(&rollup->data.subdirs, node) {
+        struct RollUp * child = (struct RollUp *) sll_node_data(node);
+        rolledup += child->rolledup;
+        total_subdirs++;
+    }
+    timestamp_end(timestamp_buffers, id, ts_buf, "check_subdirs_rolledup", check_subdirs_rolledup);
+
+    /* not all subdirectories were rolled up, so cannot roll up */
+    if (total_subdirs != rolledup) {
+        goto end_can_rollup;
+    }
+
+    /* get permissions of the current directory */
+    timestamp_start(get_perms);
+    struct Permissions perms;
+    char * err = NULL;
+    const int exec_rc = sqlite3_exec(dst, PERM_SQL, get_permissions, &perms, &err);
+    timestamp_end(timestamp_buffers, id, ts_buf, "get_perms", get_perms);
+
+    if (exec_rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Could not get permissions of current directory \"%s\": %s\n", rollup->data.name, err);
+        sqlite3_free(err);
+        legal = 0;
+        goto end_can_rollup;
     }
 
     sqlite3_free(err);
 
-    /* if any subdirectory permissions were */
-    /* not good, this rollup is not legal   */
-    legal = (total_subdirs == good_perms);
+    /* check if the permissions of this directory and its subdirectories match */
+    timestamp_start(check_perms);
+    legal = check_permissions(&perms, total_subdirs, &rollup->data.subdirs timestamp_args);
+    timestamp_end(timestamp_buffers, id, ts_buf, "check_perms", check_perms);
 
 end_can_rollup:
+
     timestamp_end(timestamp_buffers, id, ts_buf, "can_rollup", can_roll_up);
 
     return legal;
 }
 
 /*
-< 0 - bad arguments
-  0 - success
-> 0 - number of subdirectories that failed to be moved
+@return < 0 - bad arguments
+          0 - success
+        > 0 - number of subdirectories that failed to be moved
 */
 int do_rollup(struct RollUp * rollup,
               sqlite3 *dst
@@ -376,7 +419,7 @@ void rollup(void * args timestamp_sig) {
 
     if (dst) {
         if (can_rollup(dir, dst timestamp_args)) {
-            if (do_rollup(dir, dst timestamp_args) == 0) {
+            if (do_rollup(dir, dst timestamp_args) > 0) {
             #ifdef DEBUG
                 stats[dir->data.tid.up].successful_rollup++;
             }
