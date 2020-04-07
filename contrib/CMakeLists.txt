@@ -139,3 +139,7 @@ endif()
 
 # add target to build with makefiles
 add_subdirectory(make)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_subdirectory(debug)
+endif()
