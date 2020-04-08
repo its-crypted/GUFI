@@ -486,6 +486,19 @@ do {                                                                    \
 #define querydb(dbname, db, query, callback, obufs, id, ts_name, rc)
 #endif
 
+/* information to pull from the summary table before continuing */
+struct DirData {
+    ino_t inode;
+    int rollup_score;
+};
+
+int get_dir_data(void * args, int count, char **data, char **columns) {
+    struct DirData * dd = (struct DirData *) args;
+    dd->inode = atoi(data[0]);
+    dd->rollup_score = atoi(data[1]);
+    return 0;
+}
+
 int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) {
     sqlite3 *db = NULL;
     int recs;
@@ -579,8 +592,18 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     #ifdef ADDQUERYFUNCS
     debug_start(addqueryfuncs_call);
     /* this is needed to add some query functions like path() uidtouser() gidtogroup() */
+    struct DirData dd = {0};
     if (db) {
-        addqueryfuncs(db, id, work->level, work->root);
+        char * err = NULL;
+        if (sqlite3_exec(db, "SELECT inode, rollupscore FROM summary WHERE isroot == 1", get_dir_data, &dd, &err) != SQLITE_OK) {
+            fprintf(stderr, "Could not get initial summary data from \"%s\": %s", work->name, err);
+            sqlite3_free(err);
+            goto close_db;
+        }
+
+        if (addqueryfuncs(db, id, work->level, work->root) != 0) {
+            fprintf(stderr, "Could not add functions to sqlite\n");
+        }
     }
     debug_end(addqueryfuncs_call);
     #endif
@@ -623,11 +646,13 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         #endif
         #endif
         /* push subdirectories into the queue */
-        descend2(ctx, id, work, dir, processdir, in.max_level
-                 #ifdef DEBUG
-                 , descend_timers
-                 #endif
-            );
+        if (dd.rollup_score == 0) {
+            descend2(ctx, id, work, dir, processdir, in.max_level
+                     #ifdef DEBUG
+                     , descend_timers
+                     #endif
+                    );
+        }
         debug_end(descend_call);
 
         #ifdef DEBUG
@@ -681,6 +706,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         }
     }
 
+  close_db:
     #ifdef OPENDB
     debug_start(close_call);
     /* if we have an out db we just detach gufi db */

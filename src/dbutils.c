@@ -70,6 +70,7 @@ OF SUCH DAMAGE.
 #include <grp.h>
 #include "pcre.h"
 
+#include "config.h"
 #include "dbutils.h"
 
 extern int errno;
@@ -737,10 +738,59 @@ int inserttreesumdb(const char *name, sqlite3 *sdb, struct sum *su,int rectype,i
     return 0;
 }
 
+struct ConstructPathArgs {
+    char * path;
+    size_t path_len;
+    char * result;
+    size_t result_len;
+};
+
+static int construct_path(void *args, int count, char **data, char **columns) {
+    struct ConstructPathArgs * cpa = (struct ConstructPathArgs *) args;
+    char * root = data[0];
+    char * subdir = data[1];
+    /* both the current path and the name field */
+    /* contains the current directory name, so  */
+    /* remove it from the name field            */
+    subdir += strlen(root) + 1;
+    SNFORMAT_S(cpa->result, cpa->result_len, 3, cpa->path, cpa->path_len, "/", 1, subdir, strlen(subdir));
+    return 0;
+}
+
+struct PathContext {
+    char *name;
+    size_t name_len;
+    sqlite3 *db;
+    size_t id;
+    ino_t inode;
+};
+
 static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
 {
-    const size_t id = (size_t) (uintptr_t) sqlite3_user_data(context);
-    sqlite3_result_text(context, gps[id].gpath, -1, SQLITE_TRANSIENT);
+    struct PathContext *pc = (struct PathContext *) sqlite3_user_data(context);
+    const ino_t inode = sqlite3_value_int64(argv[0]);
+
+    char sql[MAXSQL];
+
+    SNPRINTF(sql, MAXSQL, "SELECT (SELECT name FROM summary WHERE isroot == 1), (SELECT name FROM summary WHERE inode == %" STAT_ino ")", inode);
+
+    char constructed_path[MAXPATH];
+    struct ConstructPathArgs cpa;
+    cpa.path = pc->name;
+    cpa.path_len = pc->name_len;
+    cpa.result = constructed_path;
+    cpa.result_len = sizeof(constructed_path);
+
+    char *err = NULL;
+    if (sqlite3_exec(pc->db, sql, construct_path, &cpa, &err) != SQLITE_OK) {
+        SNPRINTF(constructed_path, MAXPATH, "Error: Could not construct path starting: %s\n", err);
+        sqlite3_result_error(context, constructed_path, -1);
+        sqlite3_free(err);
+        return;
+    }
+
+    sqlite3_result_text(context, constructed_path, -1, SQLITE_TRANSIENT);
+
     return;
 }
 
