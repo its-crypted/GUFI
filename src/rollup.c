@@ -84,12 +84,11 @@ extern int errno;
 #define timestamp_args
 #endif
 
-const char SUBDIR_ATTACH_NAME[] = "subdir";
+#define SUBDIR_ATTACH_NAME "subdir"
 
 #ifdef DEBUG
 /* per thread stats */
 struct RollUpStats {
-    /* no need for mutex */
     size_t not_processed;
     size_t successful_rollup;
     size_t failed_rollup;
@@ -97,12 +96,15 @@ struct RollUpStats {
 };
 #endif
 
+/* main data being passed around during walk */
 struct RollUp {
     struct BottomUp data;
     int rolledup;
 };
 
-const char PERM_SQL[] = "SELECT mode, uid, gid FROM summary";
+/* ************************************** */
+/* get permissions from directory entries */
+const char PERM_SQL[] = "SELECT mode, uid, gid FROM summary WHERE isroot == 1";
 
 struct Permissions {
     mode_t mode;
@@ -231,6 +233,7 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
 
     return 0;
 }
+/* ************************************** */
 
 /* check if the current directory can be rolled up */
 /*
@@ -296,13 +299,33 @@ end_can_rollup:
     return legal;
 }
 
+/* drop pentries view */
+/* create pentries table */
+/* copy entries + pinode into pentries */
+/* define here to be able to duplicate the SQL at compile time */
+#define ROLLUP_CURRENT_DIR \
+    "DROP VIEW IF EXISTS pentries;" \
+    "CREATE TABLE pentries AS SELECT entries.*, summary.inode AS pinode FROM summary, entries;" \
+    "INSERT INTO pentries SELECT entries.*, summary.inode AS pinode from summary, entries;" \
+    "UPDATE summary SET rollupscore = 0;"
+
+/* location of the 0 in ROLLUP_CURRENT_DIR */
+static const size_t rollup_score_offset = sizeof(ROLLUP_CURRENT_DIR) - sizeof("0;");
+
+/* copy subdirectory pentries into pentries */
+/* copy subdirectory summary into summary */
+static const char rollup_subdir[] =
+    "INSERT INTO pentries SELECT * FROM " SUBDIR_ATTACH_NAME ".pentries;"
+    "INSERT INTO summary  SELECT NULL, s.name, s.type, s.inode, s.mode, s.nlink, s.uid, s.gid, s.size, s.blksize, s.blocks, s.atime, s.mtime, s.ctime, s.linkname, s.xattrs, s.totfiles, s.totlinks, s.minuid, s.maxuid, s.mingid, s.maxgid, s.minsize, s.maxsize, s.totltk, s.totmtk, s.totltm, s.totmtm, s.totmtg, s.totmtt, s.totsize, s.minctime, s.maxctime, s.minmtime, s.maxmtime, s.minatime, s.maxatime, s.minblocks, s.maxblocks, s.totxattr,depth, s.mincrtime, s.maxcrtime, s.minossint1, s.maxossint1, s.totossint1, s.minossint2, s.maxossint2, s.totossint2, s.minossint3, s.maxossint3, s.totossint3, s.minossint4, s.maxossint4, s.totossint4, s.rectype, s.pinode, 0, s.rollupscore FROM " SUBDIR_ATTACH_NAME ".summary as s;";
+
 /*
-@return < 0 - bad arguments
+@return < 0 - could not move entries into pentries
           0 - success
-        > 0 - number of subdirectories that failed to be moved
+        > 0 - at least one subdirectory failed to be moved
 */
 int do_rollup(struct RollUp * rollup,
-              sqlite3 *dst
+              sqlite3 *dst,
+              const int rollup_score
               timestamp_sig) {
     /* assume that this directory can be rolled up */
     /* can_rollup should have been called earlier  */
@@ -315,8 +338,23 @@ int do_rollup(struct RollUp * rollup,
     timestamp_start(do_roll_up);
 
     int rc = 0;
+    char * err = NULL;
+    int exec_rc = SQLITE_OK;
 
-    /* keep track of failed roll ups */
+    /* set the rollup score in the SQL statement */
+    char rollup_current_dir[] = ROLLUP_CURRENT_DIR;
+    rollup_current_dir[rollup_score_offset] += rollup_score;
+
+    timestamp_start(rollup_current_dir);
+    exec_rc = sqlite3_exec(dst, rollup_current_dir, NULL, NULL, &err);
+    timestamp_end(timestamp_buffers, id, ts_buf, "rollup_current_dir", rollup_current_dir);
+
+    if (exec_rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
+        goto end_rollup;
+    }
+
+    /* if any subdir fails to roll up, record it */
     int failed_rollup = 0;
 
     /* process each subdirectory */
@@ -326,54 +364,46 @@ int do_rollup(struct RollUp * rollup,
 
         struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
 
-        /* save this separately for remove */
         char child_db_name[MAXPATH];
         SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->name);
 
         size_t child_failed = 0;
 
-        /* attach subdir */
-        {
-            if (!attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY)) {
-                child_failed = 1;
-            }
-        }
+        /* attach subdir database file as 'SUBDIR_ATTACH_NAME' */
+        child_failed = !attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY);
 
-        /* copy all entries rows */
-        /* this query will fail if the child's summary table is empty */
+        /* roll up the subdir into this dir */
         if (!child_failed) {
-            char copy[MAXSQL];
-            sqlite3_snprintf(MAXSQL, copy, "INSERT INTO entries SELECT NULL, s.name || '/' || e.name, e.type, e.inode, e.mode, e.nlink, e.uid, e.gid, e.size, e.blksize, e.blocks, e.atime, e.mtime, e.ctime, e.linkname, e.xattrs, e.crtime, e.ossint1, e.ossint2, e.ossint3, e.ossint4, e.osstext1, e.osstext2 FROM %s.summary as s, %s.entries as e", SUBDIR_ATTACH_NAME, SUBDIR_ATTACH_NAME);
-
-            char * err = NULL;
-            if (sqlite3_exec(dst, copy, NULL, NULL, &err) != SQLITE_OK) {
-                fprintf(stderr, "Error: Failed to copy rows from \"%s\" to \"%s\": %s\n", child->name, rollup->data.name, err);
+            timestamp_start(rollup_subdir);
+            exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
+            timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
+            if (exec_rc != SQLITE_OK) {
+                fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
                 child_failed = 1;
             }
-            sqlite3_free(err);
-            err = NULL;
         }
-
-        /* probably want to update summary table */
 
         /* always detach subdir */
-        {
-            /* ignore errors - next attach will fail */
-            detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
-        }
-
-        failed_rollup += child_failed;
+        detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
 
         timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
+
+        if ((failed_rollup = child_failed)) {
+            break;
+        }
     }
+
     timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdirs", rollup_subdirs);
 
     if (failed_rollup) {
         rc = (int) failed_rollup;
     }
     else {
-        rollup->rolledup = 1;
+        rollup->rolledup = rollup_score;
     }
+
+end_rollup:
+    sqlite3_free(err);
 
     timestamp_end(timestamp_buffers, id, ts_buf, "do_rollup", do_roll_up);
     return rc;
@@ -405,8 +435,9 @@ void rollup(void * args timestamp_sig) {
     #endif
 
     if (dst) {
-        if (can_rollup(dir, dst timestamp_args)) {
-            if (do_rollup(dir, dst timestamp_args) > 0) {
+        int rollup_score = can_rollup(dir, dst timestamp_args);
+        if (rollup_score > 0) {
+            if (do_rollup(dir, dst, rollup_score timestamp_args) == 0) {
             #ifdef DEBUG
                 stats[dir->data.tid.up].successful_rollup++;
             }
@@ -415,19 +446,14 @@ void rollup(void * args timestamp_sig) {
             #endif
             }
         }
-        #ifdef DEBUG
+    #ifdef DEBUG
         else {
             stats[dir->data.tid.up].not_rolledup++;
         }
-        #endif
     }
     else {
-        /* this error message should only be seen */
-        /* at directories without database files  */
-        fprintf(stderr, "Warning: Could not open database at \"%s\": %s\n", dir->data.name, sqlite3_errmsg(dst));
-        #ifdef DEBUG
         stats[dir->data.tid.up].not_processed++;
-        #endif
+    #endif
     }
 
     closedb(dst);
