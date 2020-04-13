@@ -78,12 +78,6 @@ OF SUCH DAMAGE.
 
 extern int errno;
 
-#if defined(DEBUG) && defined(PER_THREAD_STATS)
-#define timestamp_args , id, timestamp_buffers
-#else
-#define timestamp_args
-#endif
-
 #define SUBDIR_ATTACH_NAME "subdir"
 
 #ifdef DEBUG

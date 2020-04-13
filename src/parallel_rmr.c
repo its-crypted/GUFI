@@ -75,12 +75,6 @@ OF SUCH DAMAGE.
 
 extern int errno;
 
-#if defined(DEBUG) && defined(PER_THREAD_STATS)
-#define timestamp_args , id, timestamp_buffers
-#else
-#define timestamp_args
-#endif
-
 /* Remove all non-subdirectories in the   */
 /* current directory. Then remove itself. */
 /* Subdirectories are already gone, so    */

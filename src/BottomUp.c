@@ -144,8 +144,12 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
     /* call user function */
     timestamp_start(run_user_func);
     ua->func(bu
-             #if defined(DEBUG) && defined(PER_THREAD_STATS)
-             , id, ua->timestamp_buffers
+             #ifdef DEBUG
+                 #ifdef PER_THREAD_STATS
+                     , id, ua->timestamp_buffers
+                 #else
+                     , id
+                 #endif
              #endif
         );
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "run_user_function", run_user_func);
