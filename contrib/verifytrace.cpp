@@ -133,8 +133,16 @@ bool verify_stanza(std::istream & stream, const char delim = '\x1e', const char 
             break;
         }
 
+        // empty lines are not errors
         if (!line.size()) {
             continue;
+        }
+
+        // need at least 23 columns
+        const int columns = std::count(line.begin(), line.end(), delim);
+        if (columns < 23) {
+            std::cerr << "Not enough columns" << std::endl;
+            return false;
         }
 
         // there should be at least one delimiter
