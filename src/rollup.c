@@ -84,9 +84,10 @@ extern int errno;
 /* per thread stats */
 struct RollUpStats {
     size_t not_processed;
-    size_t successful_rollup;
-    size_t failed_rollup;
     size_t not_rolledup;
+    size_t successful_rollup[5];
+    size_t failed_rollup[5];
+    struct OutputBuffers * print_buffers;
 };
 #endif
 
@@ -299,8 +300,7 @@ end_can_rollup:
 /* define here to be able to duplicate the SQL at compile time */
 #define ROLLUP_CURRENT_DIR \
     "DROP VIEW IF EXISTS pentries;" \
-    "CREATE TABLE pentries AS SELECT entries.*, summary.inode AS pinode FROM summary, entries;" \
-    "INSERT INTO pentries SELECT entries.*, summary.inode AS pinode from summary, entries;" \
+    "CREATE TABLE pentries AS SELECT entries.*, summary.inode AS pinode FROM summary, entries;" /* "CREATE TABLE AS" already inserts rows, so no need to explicitly insert rows */ \
     "UPDATE summary SET rollupscore = 0;"
 
 /* location of the 0 in ROLLUP_CURRENT_DIR */
@@ -430,13 +430,40 @@ void rollup(void * args timestamp_sig) {
 
     if (dst) {
         int rollup_score = can_rollup(dir, dst timestamp_args);
+
+        #ifdef DEBUG
+        #ifdef PRINT_ROLLUP_SCORE
+        struct OutputBuffer * obuf = &(stats->print_buffers->buffers[id]);
+
+        pthread_mutex_lock(&stats->print_buffers->mutex);
+        const size_t len = strlen(dir->data.name) + 3;
+        if ((obuf->capacity - obuf->filled) < len) {
+           fwrite(obuf->buf, sizeof(char), obuf->filled, stderr);
+           obuf->filled = 0;
+        }
+
+        if (len >= obuf->capacity) {
+           fwrite(obuf->buf, sizeof(char), obuf->filled, stderr);
+        }
+        pthread_mutex_unlock(&stats->print_buffers->mutex);
+
+        memcpy(obuf->buf + obuf->filled, dir->data.name, len - 3);
+
+        char score[] = " 0\n";
+        score[1] += rollup_score;
+        memcpy(obuf->buf + obuf->filled + len - 3, score, 3);
+
+        obuf->filled += len;
+        #endif
+        #endif
+
         if (rollup_score > 0) {
             if (do_rollup(dir, dst, rollup_score timestamp_args) == 0) {
             #ifdef DEBUG
-                stats[dir->data.tid.up].successful_rollup++;
+                stats[dir->data.tid.up].successful_rollup[rollup_score]++;
             }
             else {
-                stats[dir->data.tid.up].failed_rollup++;
+                stats[dir->data.tid.up].failed_rollup[rollup_score]++;
             #endif
             }
         }
@@ -474,7 +501,14 @@ int main(int argc, char * argv[]) {
     void * extra_args = NULL;
 
     #ifdef DEBUG
+    struct OutputBuffers print_buffers;
+    OutputBuffers_init(&print_buffers, in.maxthreads, 1024 * 1024);
+
     struct RollUpStats * debug_stats = calloc(in.maxthreads, sizeof(struct RollUpStats));
+    for(int i = 0; i < in.maxthreads; i++) {
+        debug_stats->print_buffers = &print_buffers;
+    }
+
     extra_args = debug_stats;
     #endif
 
@@ -489,27 +523,44 @@ int main(int argc, char * argv[]) {
         );
 
     #ifdef DEBUG
+    OutputBuffers_flush_single(&print_buffers, in.maxthreads, stderr);
+    OutputBuffers_destroy(&print_buffers, in.maxthreads);
+
     size_t not_processed = 0;
-    size_t successful_rollups = 0;
-    size_t failed_rollups = 0;
     size_t not_rolledup = 0;
+    size_t successful_rollups[5] = {0};
+    size_t failed_rollups[5] = {0};
     for(size_t i = 0; i < in.maxthreads; i++) {
-        not_processed      += debug_stats[i].not_processed;
-        successful_rollups += debug_stats[i].successful_rollup;
-        failed_rollups     += debug_stats[i].failed_rollup;
-        not_rolledup       += debug_stats[i].not_rolledup;
+        not_processed += debug_stats[i].not_processed;
+        not_rolledup  += debug_stats[i].not_rolledup;
+        for(size_t j = 1; j < 5; j++) {
+            successful_rollups[j] += debug_stats[i].successful_rollup[j];
+            failed_rollups[j]     += debug_stats[i].failed_rollup[j];
+        }
     }
     free(debug_stats);
 
     fprintf(stderr, "Directories:\n");
     fprintf(stderr, "    Not processed:          %zu\n", not_processed);
-    fprintf(stderr, "    Successfully rolled up: %zu\n", successful_rollups);
-    fprintf(stderr, "    Failed to roll up:      %zu\n", failed_rollups);
     fprintf(stderr, "    Not rolled up:          %zu\n", not_rolledup);
+    fprintf(stderr, "    Successful rollups:\n");
+    size_t successful = 0;
+    for(size_t i = 1; i < 5; i++) {
+        fprintf(stderr, "    %4zu:                   %zu\n", i, successful_rollups[i]);
+        successful += successful_rollups[i];
+    }
+    fprintf(stderr, "       Total:               %zu\n", successful);
+    fprintf(stderr, "    Failed rollups:\n");
+    size_t failed = 0;
+    for(size_t i = 1; i < 5; i++) {
+        fprintf(stderr, "    %4zu:                   %zu\n", i, failed_rollups[i]);
+        failed += failed_rollups[i];
+    }
+    fprintf(stderr, "       Total:               %zu\n", failed);
     fprintf(stderr, "    Total:                  %zu\n", not_processed +
-                                                         successful_rollups +
-                                                         failed_rollups +
-                                                         not_rolledup);
+                                                         not_rolledup +
+                                                         successful +
+                                                         failed);
 
     #ifdef PER_THREAD_STATS
     timestamp_destroy(timestamp_buffers, in.maxthreads + 1);
