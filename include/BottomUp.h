@@ -78,10 +78,17 @@ OF SUCH DAMAGE.
 #include "SinglyLinkedList.h"
 
 /* extra AscendFunc_t argments */
-#if defined(DEBUG) && defined(PER_THREAD_STATS)
-#define timestamp_sig  , const size_t id, struct OutputBuffers * timestamp_buffers
+#ifdef DEBUG
+    #ifdef PER_THREAD_STATS
+        #define timestamp_sig  , const size_t id, struct OutputBuffers * timestamp_buffers
+        #define timestamp_args , id, timestamp_buffers
+    #else
+        #define timestamp_sig  , const size_t id
+        #define timestamp_args , id
+    #endif
 #else
-#define timestamp_sig
+    #define timestamp_sig
+    #define timestamp_args
 #endif
 
 /*

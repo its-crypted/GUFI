@@ -639,29 +639,29 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     }
     /* so we have to go on and query summary and entries possibly */
     if (recs > 0) {
-        debug_start(descend_call);
-        #ifdef DEBUG
-        #ifdef SUBDIRECTORY_COUNTS
-        const size_t pushed =
-        #endif
-        #endif
         /* push subdirectories into the queue */
+
         if (dd.rollup_score == 0) {
+            #ifdef DEBUG
+            debug_start(descend_call);
+            #ifdef SUBDIRECTORY_COUNTS
+            const size_t pushed =
+            #endif
+            #endif
             descend2(ctx, id, work, dir, processdir, in.max_level
                      #ifdef DEBUG
                      , descend_timers
                      #endif
                     );
+            #ifdef DEBUG
+            debug_end(descend_call);
+            #ifdef SUBDIRECTORY_COUNTS
+            pthread_mutex_lock(&print_mutex);
+            fprintf(stderr, "%s %zu\n", work->name, pushed);
+            pthread_mutex_unlock(&print_mutex);
+            #endif
+            #endif
         }
-        debug_end(descend_call);
-
-        #ifdef DEBUG
-        #ifdef SUBDIRECTORY_COUNTS
-        pthread_mutex_lock(&print_mutex);
-        fprintf(stderr, "%s %zu\n", work->name, pushed);
-        pthread_mutex_unlock(&print_mutex);
-        #endif
-        #endif
 
         if (db) {
             /* only query this level if the min_level has been reached */
