@@ -345,6 +345,7 @@ int do_rollup(struct RollUp * rollup,
 
     if (exec_rc != SQLITE_OK) {
         fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
+        rc = -1;
         goto end_rollup;
     }
 
