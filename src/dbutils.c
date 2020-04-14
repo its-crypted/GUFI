@@ -752,8 +752,8 @@ static int construct_path(void *args, int count, char **data, char **columns) {
     /* both the current path and the name field */
     /* contains the current directory name, so  */
     /* remove it from the name field            */
-    subdir += strlen(root) + 1;
-    SNFORMAT_S(cpa->result, cpa->result_len, 3, cpa->path, cpa->path_len, "/", 1, subdir, strlen(subdir));
+    subdir += strlen(root);
+    SNFORMAT_S(cpa->result, cpa->result_len, 2, cpa->path, cpa->path_len, subdir, strlen(subdir));
     return 0;
 }
 
