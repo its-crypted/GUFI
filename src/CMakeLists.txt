@@ -198,6 +198,7 @@ set(C_SOURCES
   querydb.c
   querydbn.c
   rollup.c
+  unrollup.c
 )
 
 # build the C executables
