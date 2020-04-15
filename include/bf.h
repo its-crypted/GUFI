@@ -192,6 +192,9 @@ struct input {
    int format_set;
    char format[MAXPATH];
    int terse;
+
+   /* only used by rollup */
+   int dry_run;
 };
 extern struct input in;
 

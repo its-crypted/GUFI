@@ -121,8 +121,8 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
 
     timestamp_start(get_remaining_refs);
     size_t remaining = 0;
-    if (bu->refs.count) {
-        remaining = --bu->refs.count;
+    if (bu->refs.remaining) {
+        remaining = --bu->refs.remaining;
     }
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "get_remaining_refs", get_remaining_refs);
 
@@ -146,9 +146,7 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
     ua->func(bu
              #ifdef DEBUG
                  #ifdef PER_THREAD_STATS
-                     , id, ua->timestamp_buffers
-                 #else
-                     , id
+                     , ua->timestamp_buffers
                  #endif
              #endif
         );
@@ -177,11 +175,18 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
 }
 
 static struct BottomUp * track(const char * name, const size_t name_len,
-                               const size_t user_struct_size, struct sll * sll) {
+                               const size_t user_struct_size, struct sll * sll
+                               #ifdef DEBUG
+                               , const size_t level
+                               #endif
+) {
     struct BottomUp * copy = malloc(user_struct_size);
 
-    /* don't need anything else */
     memcpy(copy->name, name, name_len + 1);
+
+    #ifdef DEBUG
+    copy->level = level;
+    #endif
 
     /* store the subdirectories without enqueuing them */
     sll_push(sll, copy);
@@ -213,12 +218,15 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 
     timestamp_start(init);
     pthread_mutex_init(&bu->refs.mutex, NULL);
-    bu->refs.count = 0;
+    bu->refs.total = 0;
     sll_init(&bu->subdirs);
     sll_init(&bu->subnondirs);
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "init", init);
 
     timestamp_start(read_dir_loop);
+    #ifdef DEBUG
+    const size_t next_level = bu->level + 1;
+    #endif
     while (1) {
         timestamp_start(read_dir);
         struct dirent * entry = readdir(dir);;
@@ -248,14 +256,22 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 
         timestamp_start(track_entry);
         if (S_ISDIR(st.st_mode)) {
-            track(new_work.name, name_len, ua->user_struct_size, &bu->subdirs);
+            track(new_work.name, name_len, ua->user_struct_size, &bu->subdirs
+                  #ifdef DEBUG
+                  , next_level
+                  #endif
+                );
 
             /* count how many subdirectories this directory has */
-            bu->refs.count++;
+            bu->refs.total++;
         }
         else {
             if (ua->track_non_dirs) {
-                track(new_work.name, name_len, ua->user_struct_size, &bu->subnondirs);
+                track(new_work.name, name_len, ua->user_struct_size, &bu->subnondirs
+                      #ifdef DEBUG
+                      , next_level
+                      #endif
+                );
             }
         }
         timestamp_end(ua->timestamp_buffers, id, ts_buf, "track", track_entry);
@@ -267,7 +283,8 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "closedir", close_dir);
 
     /* if there are subdirectories, this directory cannot go back up just yet */
-    if (bu->refs.count) {
+    bu->refs.remaining = bu->refs.total;
+    if (bu->refs.total) {
         timestamp_start(enqueue_subdirs);
         sll_loop(&bu->subdirs, node)  {
             struct BottomUp *child = (struct BottomUp *) sll_node_data(node);
@@ -362,6 +379,10 @@ int parallel_bottomup(char ** root_names, size_t root_count,
 
         root->parent = NULL;
         root->extra_args = extra_args;
+
+        #ifdef DEBUG
+        root->level = 0;
+        #endif
 
         timestamp_start(enqueue_root);
         QPTPool_enqueue(pool, i % in.maxthreads, descend_to_bottom, root);

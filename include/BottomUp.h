@@ -78,14 +78,9 @@ OF SUCH DAMAGE.
 #include "SinglyLinkedList.h"
 
 /* extra AscendFunc_t argments */
-#ifdef DEBUG
-    #ifdef PER_THREAD_STATS
-        #define timestamp_sig  , const size_t id, struct OutputBuffers * timestamp_buffers
-        #define timestamp_args , id, timestamp_buffers
-    #else
-        #define timestamp_sig  , const size_t id
-        #define timestamp_args , id
-    #endif
+#if defined(DEBUG) && defined(PER_THREAD_STATS)
+    #define timestamp_sig  struct OutputBuffers * timestamp_buffers
+    #define timestamp_args timestamp_buffers
 #else
     #define timestamp_sig
     #define timestamp_args
@@ -104,7 +99,8 @@ struct BottomUp {
     char name[MAXPATH];
     struct {
         pthread_mutex_t mutex;
-        size_t count;
+        size_t remaining;
+        size_t total; /* doesn't have to be in here */
     } refs;
     struct sll subdirs;
     struct sll subnondirs;
@@ -113,12 +109,11 @@ struct BottomUp {
     /* extra arguments available at all times */
     void * extra_args;
 
-    #ifdef DEBUG
+    size_t level;
     struct {
         size_t down;
         size_t up;
     } tid;
-    #endif
 };
 
 /* Signature of function for processing */

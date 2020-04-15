@@ -143,6 +143,7 @@ void print_help(const char* prog_name,
       case 'w': printf("  -w                 open the database files in read-write mode instead of read only mode\n"); break;
       case 'f': printf("  -f <FORMAT>        use the specified FORMAT instead of the default; output a newline after each use of FORMAT\n"); break;
       case 'j': printf("  -j                 print the information in terse form\n"); break;
+      case 'X': printf("  -X                 Dry run\n"); break;
 
       default: printf("print_help(): unrecognized option '%c'\n", (char)ch);
       }
@@ -197,6 +198,7 @@ void show_input(struct input* in, int retval) {
    printf("in.format_set         = %d\n",    in->format_set);
    printf("in.format             = '%s'\n",  in->format);
    printf("in.terse              = %d\n",    in->terse);
+   printf("in.dry_run            = %d\n",    in->dry_run);
    printf("\n");
    printf("retval                = %d\n",    retval);
    printf("\n");
@@ -250,6 +252,7 @@ int parse_cmd_line(int         argc,
    in->format_set         = 0;
    memset(in->format,       0, MAXPATH);
    in->terse              = 0;
+   in->dry_run            = 0;
 
    int show   = 0;
    int retval = 0;
@@ -454,6 +457,10 @@ int parse_cmd_line(int         argc,
 
       case 'j':
           in->terse = 1;
+          break;
+
+      case 'X':
+          in->dry_run = 1;
           break;
 
       case '?':
