@@ -195,6 +195,9 @@ struct input {
    /* only used by gufi_stat */
    int format_set;
    char format[MAXPATH];
+
+   /* only used by rollup */
+   int dry_run;
 };
 extern struct input in;
 

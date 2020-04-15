@@ -80,21 +80,125 @@ extern int errno;
 
 #define SUBDIR_ATTACH_NAME "subdir"
 
-#ifdef DEBUG
 /* per thread stats */
 struct RollUpStats {
+    /* level of a successful rollup */
+    struct sll levels;
+
+    /* number of directories immediately under the top level of a roll up */
+    /* sum this to get final count of dirs that need processing */
+    struct sll subdirs;
+
+    /* counts */
     size_t not_processed;
     size_t not_rolledup;
     size_t successful_rollup[5];
     size_t failed_rollup[5];
+
+    #ifdef DEBUG
     struct OutputBuffers * print_buffers;
+    #endif
 };
-#endif
+
+size_t rollup_distribution(const char * name, size_t * distribution) {
+    size_t total = 0;
+    fprintf(stderr, "%s:\n", name);
+    for(size_t i = 1; i < 5; i++) {
+        fprintf(stderr, "    %zu: %20zu\n", i, distribution[i]);
+        total += distribution[i];
+    }
+    fprintf(stderr, "    Total: %16zu\n", total);
+    return total;
+}
+
+/* compare function for qsort */
+int compare_size_t(const void * lhs, const void * rhs) {
+    return (*(size_t *) lhs - *(size_t *) rhs);
+}
+
+#define sll_size_t_stats(name, stats, var, threads, width)              \
+do {                                                                    \
+    struct sll all;                                                     \
+    sll_init(&all);                                                     \
+    for(int i = 0; i < threads; i++) {                                  \
+        sll_move_append(&all, &stats[i].var);                           \
+    }                                                                   \
+                                                                        \
+    const size_t count = sll_get_size(&all);                            \
+    size_t * array = malloc(count * sizeof(size_t));                    \
+    size_t min = (size_t) -1;                                           \
+    size_t max = 0;                                                     \
+    size_t sum = 0;                                                     \
+    size_t i = 0;                                                       \
+    sll_loop(&all, node) {                                              \
+        const size_t value = (size_t) (uintptr_t) sll_node_data(node);  \
+        if (value < min) {                                              \
+            min = value;                                                \
+        }                                                               \
+                                                                        \
+        if (value > max) {                                              \
+            max = value;                                                \
+        }                                                               \
+                                                                        \
+        sum += value;                                                   \
+        array[i++] = value;                                             \
+    }                                                                   \
+                                                                        \
+    qsort(array, count, sizeof(size_t), compare_size_t);                \
+    const size_t half = count / 2;                                      \
+    double median = array[half];                                        \
+    if (count % 2 == 0) {                                               \
+        median += array[half + 1];                                      \
+        median /= 2;                                                    \
+    }                                                                   \
+                                                                        \
+    free(array);                                                        \
+                                                                        \
+    const double average = ((double) sum) / count;                      \
+                                                                        \
+    fprintf(stderr, "    " name ":\n");                                 \
+    fprintf(stderr, "        count:      %" #width "zu\n", count);      \
+    fprintf(stderr, "        min:        %" #width "zu\n", min);        \
+    fprintf(stderr, "        max:        %" #width "zu\n", max);        \
+    fprintf(stderr, "        median:     %" #width ".2f\n", median);    \
+    fprintf(stderr, "        sum:        %" #width "zu\n", sum);        \
+    fprintf(stderr, "        average:    %" #width ".2f\n", average);   \
+} while (0)
+
+void print_stats(struct RollUpStats * stats, const size_t threads) {
+    size_t not_processed = 0;
+    size_t not_rolledup = 0;
+    size_t successful_rollups[5] = {0};
+    size_t failed_rollups[5] = {0};
+    for(size_t i = 0; i < threads; i++) {
+        not_processed += stats[i].not_processed;
+        not_rolledup  += stats[i].not_rolledup;
+        for(size_t j = 1; j < 5; j++) {
+            successful_rollups[j] += stats[i].successful_rollup[j];
+            failed_rollups[j]     += stats[i].failed_rollup[j];
+        }
+    }
+
+    fprintf(stderr, "Not processed: %12zu\n", not_processed);
+    fprintf(stderr, "Not rolled up: %12zu\n", not_rolledup);
+    const size_t successful = rollup_distribution("Successful rollups", successful_rollups);
+    fprintf(stderr, "\n");
+    sll_size_t_stats("Rollup occuring at a level", stats, levels, threads, 7);
+    fprintf(stderr, "\n");
+    /* the entries stat includes cumulative rollups, not just stats from the top level of a rolled up subtree */
+    sll_size_t_stats("Remaining subdirs", stats, subdirs, threads, 7);
+    const size_t failed = rollup_distribution("Failed rollups", failed_rollups);
+    fprintf(stderr, "Total: %20zu\n", not_processed +
+                                      not_rolledup +
+                                      successful +
+                                      failed);
+}
 
 /* main data being passed around during walk */
 struct RollUp {
     struct BottomUp data;
     int rolledup;
+    size_t entries;
 };
 
 /* ************************************** */
@@ -129,7 +233,7 @@ int get_permissions(void * args, int count, char ** data, char ** columns) {
          3 - self and subdirectories have same user permissions, go-rx, uid
          4 - self and subdirectories have same user, group, and others permissions, uid, and gid
 */
-int check_permissions(struct Permissions * curr, const size_t child_count, struct sll * child_list timestamp_sig) {
+int check_permissions(struct Permissions * curr, const size_t child_count, struct sll * child_list, const size_t id timestamp_sig) {
     timestamp_create_buffer(4096);
 
     struct Permissions * child_perms = malloc(sizeof(struct Permissions) * sll_get_size(child_list));
@@ -259,7 +363,7 @@ int can_rollup(struct RollUp * rollup,
         rolledup += child->rolledup;
         total_subdirs++;
     }
-    timestamp_end(timestamp_buffers, id, ts_buf, "check_subdirs_rolledup", check_subdirs_rolledup);
+    timestamp_end(timestamp_buffers, rollup->data.tid.up, ts_buf, "check_subdirs_rolledup", check_subdirs_rolledup);
 
     /* not all subdirectories were rolled up, so cannot roll up */
     if (total_subdirs != rolledup) {
@@ -271,25 +375,23 @@ int can_rollup(struct RollUp * rollup,
     struct Permissions perms;
     char * err = NULL;
     const int exec_rc = sqlite3_exec(dst, PERM_SQL, get_permissions, &perms, &err);
-    timestamp_end(timestamp_buffers, id, ts_buf, "get_perms", get_perms);
+    timestamp_end(timestamp_buffers, rollup->data.tid.up, ts_buf, "get_perms", get_perms);
 
     if (exec_rc != SQLITE_OK) {
         fprintf(stderr, "Error: Could not get permissions of current directory \"%s\": %s\n", rollup->data.name, err);
-        sqlite3_free(err);
         legal = 0;
         goto end_can_rollup;
     }
 
-    sqlite3_free(err);
-
     /* check if the permissions of this directory and its subdirectories match */
     timestamp_start(check_perms);
-    legal = check_permissions(&perms, total_subdirs, &rollup->data.subdirs timestamp_args);
-    timestamp_end(timestamp_buffers, id, ts_buf, "check_perms", check_perms);
+    legal = check_permissions(&perms, total_subdirs, &rollup->data.subdirs, rollup->data.tid.up timestamp_args);
+    timestamp_end(timestamp_buffers, rollup->data.tid.up, ts_buf, "check_perms", check_perms);
 
 end_can_rollup:
+    sqlite3_free(err);
 
-    timestamp_end(timestamp_buffers, id, ts_buf, "can_rollup", can_roll_up);
+    timestamp_end(timestamp_buffers, rollup->data.tid.up, ts_buf, "can_rollup", can_roll_up);
 
     return legal;
 }
@@ -341,7 +443,7 @@ int do_rollup(struct RollUp * rollup,
 
     timestamp_start(rollup_current_dir);
     exec_rc = sqlite3_exec(dst, rollup_current_dir, NULL, NULL, &err);
-    timestamp_end(timestamp_buffers, id, ts_buf, "rollup_current_dir", rollup_current_dir);
+    timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_current_dir", rollup_current_dir);
 
     if (exec_rc != SQLITE_OK) {
         fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
@@ -354,6 +456,7 @@ int do_rollup(struct RollUp * rollup,
 
     /* process each subdirectory */
     timestamp_start(rollup_subdirs);
+
     sll_loop(&rollup->data.subdirs, node) {
         timestamp_start(rollup_subdir);
 
@@ -371,7 +474,7 @@ int do_rollup(struct RollUp * rollup,
         if (!child_failed) {
             timestamp_start(rollup_subdir);
             exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
-            timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
+            timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdir", rollup_subdir);
             if (exec_rc != SQLITE_OK) {
                 fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
                 child_failed = 1;
@@ -381,14 +484,14 @@ int do_rollup(struct RollUp * rollup,
         /* always detach subdir */
         detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
 
-        timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdir", rollup_subdir);
+        timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdir", rollup_subdir);
 
         if ((failed_rollup = child_failed)) {
             break;
         }
     }
 
-    timestamp_end(timestamp_buffers, id, ts_buf, "rollup_subdirs", rollup_subdirs);
+    timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdirs", rollup_subdirs);
 
     if (failed_rollup) {
         rc = (int) failed_rollup;
@@ -400,13 +503,15 @@ int do_rollup(struct RollUp * rollup,
 end_rollup:
     sqlite3_free(err);
 
-    timestamp_end(timestamp_buffers, id, ts_buf, "do_rollup", do_roll_up);
+    timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "do_rollup", do_roll_up);
     return rc;
 }
 
 void rollup(void * args timestamp_sig) {
     struct RollUp * dir = (struct RollUp *) args;
     dir->rolledup = 0;
+
+    const size_t id = dir->data.tid.up;
 
     timestamp_create_buffer(4096);
 
@@ -430,7 +535,7 @@ void rollup(void * args timestamp_sig) {
     #endif
 
     if (dst) {
-        int rollup_score = can_rollup(dir, dst timestamp_args);
+        const int rollup_score = can_rollup(dir, dst timestamp_args);
 
         #ifdef DEBUG
         #ifdef PRINT_ROLLUP_SCORE
@@ -459,23 +564,38 @@ void rollup(void * args timestamp_sig) {
         #endif
 
         if (rollup_score > 0) {
-            if (do_rollup(dir, dst, rollup_score timestamp_args) == 0) {
-            #ifdef DEBUG
-                stats[dir->data.tid.up].successful_rollup[rollup_score]++;
+            if (in.dry_run || (do_rollup(dir, dst, rollup_score timestamp_args) == 0)) {
+                dir->rolledup = rollup_score;
+                sll_push(&stats[id].levels, (void *) (uintptr_t) dir->data.level);
+                stats[id].successful_rollup[rollup_score]++;
             }
             else {
-                stats[dir->data.tid.up].failed_rollup[rollup_score]++;
-            #endif
+                stats[id].failed_rollup[rollup_score]++;
             }
         }
-    #ifdef DEBUG
         else {
-            stats[dir->data.tid.up].not_rolledup++;
+            stats[id].not_rolledup++;
+        }
+
+        /* if roll up failed, then all subdirs are the top of their subtrees */
+        /* also handle root directory if it was rolled up */
+        if ((rollup_score == 0) || ((rollup_score > 0) && !dir->data.parent)) {
+            sll_loop(&dir->data.subdirs, node) {
+                struct RollUp * child = (struct RollUp *) sll_node_data(node);
+                size_t value = 0;
+                if (child->rolledup) {
+                    value = 1;
+                }
+                else {
+                    value = child->data.refs.total;
+                }
+
+                sll_push(&stats[id].subdirs, (void *) (uintptr_t) value);
+            }
         }
     }
     else {
-        stats[dir->data.tid.up].not_processed++;
-    #endif
+        stats[id].not_processed++;
     }
 
     closedb(dst);
@@ -487,87 +607,67 @@ void sub_help() {
 }
 
 int main(int argc, char * argv[]) {
-    int idx = parse_cmd_line(argc, argv, "hHn:", 1, "GUFI_index ...", &in);
+    int idx = parse_cmd_line(argc, argv, "hHn:X", 1, "GUFI_index ...", &in);
     if (in.helped)
         sub_help();
     if (idx < 0)
         return -1;
 
-    #if defined(DEBUG) && defined(PER_THREAD_STATS)
+    #ifdef DEBUG
+    pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+    #ifdef PER_THREAD_STATS
     epoch = since_epoch(NULL);
 
-    timestamp_init(timestamp_buffers, in.maxthreads + 1, 1024 * 1024, NULL);
+    timestamp_init(timestamp_buffers, in.maxthreads + 1, 1024 * 1024, &print_mutex);
+    #endif
     #endif
 
-    void * extra_args = NULL;
+    struct RollUpStats * stats = calloc(in.maxthreads, sizeof(struct RollUpStats));
+    for(int i = 0; i < in.maxthreads; i++) {
+        sll_init(&stats[i].levels);
+        sll_init(&stats[i].subdirs);
+    }
 
     #ifdef DEBUG
     struct OutputBuffers print_buffers;
-    OutputBuffers_init(&print_buffers, in.maxthreads, 1024 * 1024);
+    OutputBuffers_init(&print_buffers, in.maxthreads, 1024 * 1024, &print_mutex);
 
-    struct RollUpStats * debug_stats = calloc(in.maxthreads, sizeof(struct RollUpStats));
     for(int i = 0; i < in.maxthreads; i++) {
-        debug_stats->print_buffers = &print_buffers;
+        stats[i].print_buffers = &print_buffers;
     }
-
-    extra_args = debug_stats;
     #endif
 
     const int rc = parallel_bottomup(argv + idx, argc - idx,
                                      in.maxthreads,
                                      sizeof(struct RollUp), rollup,
                                      0,
-                                     extra_args
+                                     stats
                                      #if defined(DEBUG) && defined(PER_THREAD_STATS)
                                      , timestamp_buffers
                                      #endif
         );
 
     #ifdef DEBUG
-    OutputBuffers_flush_single(&print_buffers, in.maxthreads, stderr);
-    OutputBuffers_destroy(&print_buffers, in.maxthreads);
-
-    size_t not_processed = 0;
-    size_t not_rolledup = 0;
-    size_t successful_rollups[5] = {0};
-    size_t failed_rollups[5] = {0};
-    for(size_t i = 0; i < in.maxthreads; i++) {
-        not_processed += debug_stats[i].not_processed;
-        not_rolledup  += debug_stats[i].not_rolledup;
-        for(size_t j = 1; j < 5; j++) {
-            successful_rollups[j] += debug_stats[i].successful_rollup[j];
-            failed_rollups[j]     += debug_stats[i].failed_rollup[j];
-        }
-    }
-    free(debug_stats);
-
-    fprintf(stderr, "Directories:\n");
-    fprintf(stderr, "    Not processed:          %zu\n", not_processed);
-    fprintf(stderr, "    Not rolled up:          %zu\n", not_rolledup);
-    fprintf(stderr, "    Successful rollups:\n");
-    size_t successful = 0;
-    for(size_t i = 1; i < 5; i++) {
-        fprintf(stderr, "    %4zu:                   %zu\n", i, successful_rollups[i]);
-        successful += successful_rollups[i];
-    }
-    fprintf(stderr, "       Total:               %zu\n", successful);
-    fprintf(stderr, "    Failed rollups:\n");
-    size_t failed = 0;
-    for(size_t i = 1; i < 5; i++) {
-        fprintf(stderr, "    %4zu:                   %zu\n", i, failed_rollups[i]);
-        failed += failed_rollups[i];
-    }
-    fprintf(stderr, "       Total:               %zu\n", failed);
-    fprintf(stderr, "    Total:                  %zu\n", not_processed +
-                                                         not_rolledup +
-                                                         successful +
-                                                         failed);
+    OutputBuffers_flush_to_single(&print_buffers, stderr);
+    OutputBuffers_destroy(&print_buffers);
 
     #ifdef PER_THREAD_STATS
     timestamp_destroy(timestamp_buffers);
     #endif
 
     #endif
+
+    print_stats(stats, in.maxthreads);
+
+    for(int i = 0; i < in.maxthreads; i++) {
+        #ifdef DEBUG
+        stats[i].print_buffers = NULL;
+        #endif
+        sll_destroy(&stats[i].levels, 0);
+        sll_destroy(&stats[i].subdirs, 0);
+    }
+    free(stats);
 
     return rc;
 }

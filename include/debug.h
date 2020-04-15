@@ -101,7 +101,7 @@ int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const
     struct OutputBuffers obs##_stack;                                   \
     struct OutputBuffers * obs = &obs##_stack;                          \
     pthread_mutex_t obs##_static_mutex = PTHREAD_MUTEX_INITIALIZER;     \
-    pthread_mutex_t *obs##_mutex_ptr = mutex_ptr;                       \
+    pthread_mutex_t *obs##_mutex_ptr = (mutex_ptr);                     \
     if (!obs##_mutex_ptr) {                                             \
         obs##_mutex_ptr = &obs##_static_mutex;                          \
     }                                                                   \
