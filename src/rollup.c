@@ -125,6 +125,10 @@ do {                                                                    \
     }                                                                   \
                                                                         \
     const size_t count = sll_get_size(&all);                            \
+    if (count == 0) {                                                   \
+        fprintf(stderr, "    No " name " stats\n");                     \
+        break;                                                          \
+    }                                                                   \
     size_t * array = malloc(count * sizeof(size_t));                    \
     size_t min = (size_t) -1;                                           \
     size_t max = 0;                                                     \
@@ -163,6 +167,8 @@ do {                                                                    \
     fprintf(stderr, "        median:     %" #width ".2f\n", median);    \
     fprintf(stderr, "        sum:        %" #width "zu\n", sum);        \
     fprintf(stderr, "        average:    %" #width ".2f\n", average);   \
+                                                                        \
+    sll_destroy(&all, 0);                                               \
 } while (0)
 
 void print_stats(struct RollUpStats * stats, const size_t threads) {
@@ -237,9 +243,9 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
     timestamp_create_buffer(4096);
 
     struct Permissions * child_perms = malloc(sizeof(struct Permissions) * sll_get_size(child_list));
-    size_t idx = 0;
 
     /* get permissions of each child */
+    size_t idx = 0;
     sll_loop(child_list, node) {
         struct RollUp * child = (struct RollUp *) sll_node_data(node);
 
@@ -283,6 +289,7 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
     }
 
     if (child_count != idx) {
+        free(child_perms);
         return -1;
     }
 
@@ -313,6 +320,8 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
               (curr->uid == child_perms[i].uid));
 
     }
+
+    free(child_perms);
 
     if (o_plus_rx == idx) {
       return 1;
@@ -345,6 +354,7 @@ int can_rollup(struct RollUp * rollup,
     /* if (!rollup || !dst) { */
     /*     return -1; */
     /* } */
+    char * err = NULL;
 
     timestamp_create_buffer(4096);
     timestamp_start(can_roll_up);
@@ -373,7 +383,6 @@ int can_rollup(struct RollUp * rollup,
     /* get permissions of the current directory */
     timestamp_start(get_perms);
     struct Permissions perms;
-    char * err = NULL;
     const int exec_rc = sqlite3_exec(dst, PERM_SQL, get_permissions, &perms, &err);
     timestamp_end(timestamp_buffers, rollup->data.tid.up, ts_buf, "get_perms", get_perms);
 
