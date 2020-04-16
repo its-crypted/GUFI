@@ -367,13 +367,11 @@ int parallel_bottomup(char ** root_names, size_t root_count,
         struct stat st;
         if (lstat(root->name, &st) != 0) {
             fprintf(stderr, "Could not stat %s\n", root->name);
-            free(root);
             continue;
         }
 
         if (!S_ISDIR(st.st_mode)) {
             fprintf(stderr, "%s is not a directory\n", root->name);
-            free(root);
             continue;
         }
 
