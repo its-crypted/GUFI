@@ -749,23 +749,27 @@ static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
     char * name = (char *) sqlite3_value_text(argv[1]);
 
     const char * prefix = gps[id].gpath;
-    char buf[MAXPATH];
     if (pinode == 0) {
         /* summary */
         /* there are two copies of the top level directory */
         /* name, so remove the first path from the name */
-        char *p = name;
-        while (*p && (*p != '/')) {
-            p++;
+        while (*name && (*name != '/')) {
+            name++;
         }
-        p++;
-
-        SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, p, strlen(p));
+        name++;
     }
     else {
         /* entries */
         /* just append the name */
-        SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, name, strlen(name));
+    }
+
+    const size_t len = strlen(name);
+    char buf[MAXPATH];
+    if (len) {
+        SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, name, len);
+    }
+    else {
+        SNFORMAT_S(buf, MAXPATH, 1, prefix, strlen(prefix));
     }
     sqlite3_result_text(context, buf, -1, SQLITE_TRANSIENT);
 
