@@ -105,26 +105,26 @@ replace "${output}"
 echo
 
 echo "# Get relative paths of all directories and non-directories ascending names"
-replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT)\" -S \"INSERT INTO out SELECT path(inode) FROM summary\" -E \"INSERT INTO out SELECT path(pinode) || '/' || name FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY name ASC\" ${INDEXROOT}"
-output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT)" -S "INSERT INTO out SELECT path(inode) FROM summary" -E "INSERT INTO out SELECT path(pinode) || '/' || name FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY name ASC" ${INDEXROOT})
+replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT)\" -S \"INSERT INTO out SELECT path(0, name) FROM summary\" -E \"INSERT INTO out SELECT path(pinode, name) FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY name ASC\" ${INDEXROOT}"
+output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT)" -S "INSERT INTO out SELECT path(0, name) FROM summary" -E "INSERT INTO out SELECT path(pinode, name) FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY name ASC" ${INDEXROOT})
 replace "${output}" | sed "s/${INDEXROOT//\//\\/}/./g"
 echo
 
 echo "# Get relative paths of all directories and non-directories descending names"
-replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT)\" -S \"INSERT INTO out SELECT path(inode) FROM summary\" -E \"INSERT INTO out SELECT path(pinode) || '/' || name FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY name DESC\" ${INDEXROOT}"
-output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT)" -S "INSERT INTO out SELECT path(inode) FROM summary" -E "INSERT INTO out SELECT path(pinode) || '/' || name FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY name DESC" ${INDEXROOT})
+replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT)\" -S \"INSERT INTO out SELECT path(0, name) FROM summary\" -E \"INSERT INTO out SELECT path(pinode, name) || '/' || name FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY name DESC\" ${INDEXROOT}"
+output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT)" -S "INSERT INTO out SELECT path(0, name) FROM summary" -E "INSERT INTO out SELECT path(pinode, name) FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY name DESC" ${INDEXROOT})
 replace "${output}" | sed "s/${INDEXROOT//\//\\/}/./g"
 echo
 
 echo "# Get relative paths of all directories and non-directories ascending sizes"
-replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT, size INT64)\" -E \"INSERT INTO out SELECT path(pinode) || '/' || name, size FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY size ASC, name ASC\" ${INDEXROOT}"
-output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT, size INT64)" -E "INSERT INTO out SELECT path(pinode) || '/' || name, size FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY size ASC, name ASC" ${INDEXROOT})
+replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT, size INT64)\" -E \"INSERT INTO out SELECT path(pinode, name), size FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY size ASC, name ASC\" ${INDEXROOT}"
+output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT, size INT64)" -E "INSERT INTO out SELECT path(pinode, name), size FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY size ASC, name ASC" ${INDEXROOT})
 replace "${output}"
 echo
 
 echo "# Get relative paths of all directories and non-directories descending sizes"
-replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT, size INT64)\" -E \"INSERT INTO out SELECT path(pinode) || '/' || name, size FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY size DESC, name DESC\" ${INDEXROOT}"
-output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT, size INT64)" -E "INSERT INTO out SELECT path(pinode) || '/' || name, size FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY size DESC, name DESC" ${INDEXROOT})
+replace "$ ${GUFI_QUERY} -d \" \" -e 0 -a -I \"CREATE TABLE out(name TEXT, size INT64)\" -E \"INSERT INTO out SELECT path(pinode, name), size FROM pentries\" -J \"INSERT INTO aggregate.out SELECT * FROM out\" -G \"SELECT name FROM out ORDER BY size DESC, name DESC\" ${INDEXROOT}"
+output=$(${GUFI_QUERY} -d " " -e 0 -a -I "CREATE TABLE out(name TEXT, size INT64)" -E "INSERT INTO out SELECT path(pinode, name), size FROM pentries" -J "INSERT INTO aggregate.out SELECT * FROM out" -G "SELECT name FROM out ORDER BY size DESC, name DESC" ${INDEXROOT})
 replace "${output}"
 echo
 

@@ -96,8 +96,8 @@ function replace() {
 
 (
 replace "# Use ${BFQ} to generate per-thread result database files"
-replace "${BFQ} -n ${THREADS} -O ${OUTDB} -I \"CREATE TABLE ${TABLE}(name TEXT, size INT64)\" -E \"INSERT INTO ${TABLE} SELECT path(pinode) || '/' || name, size FROM pentries WHERE type=='f'\" ${INDEXROOT}"
-output=$(${BFQ} -n ${THREADS} -O "${OUTDB}" -I "CREATE TABLE ${TABLE}(name TEXT, size INT64)" -E "INSERT INTO ${TABLE} SELECT path(pinode) || '/' || name, size FROM pentries WHERE type=='f'" "${INDEXROOT}")
+replace "${BFQ} -n ${THREADS} -O ${OUTDB} -I \"CREATE TABLE ${TABLE}(name TEXT, size INT64)\" -E \"INSERT INTO ${TABLE} SELECT path(pinode, name), size FROM pentries WHERE type=='f'\" ${INDEXROOT}"
+output=$(${BFQ} -n ${THREADS} -O "${OUTDB}" -I "CREATE TABLE ${TABLE}(name TEXT, size INT64)" -E "INSERT INTO ${TABLE} SELECT path(pinode, name), size FROM pentries WHERE type=='f'" "${INDEXROOT}")
 echo "${output}"
 
 replace "# Query all per-thread result databse files at once"
