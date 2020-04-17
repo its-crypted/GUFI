@@ -742,58 +742,32 @@ int inserttreesumdb(const char *name, sqlite3 *sdb, struct sum *su,int rectype,i
     return 0;
 }
 
-struct ConstructPathArgs {
-    char * path;
-    size_t path_len;
-    char * result;
-    size_t result_len;
-};
-
-static int construct_path(void *args, int count, char **data, char **columns) {
-    struct ConstructPathArgs * cpa = (struct ConstructPathArgs *) args;
-    char * root = data[0];
-    char * subdir = data[1];
-    /* both the current path and the name field */
-    /* contains the current directory name, so  */
-    /* remove it from the name field            */
-    subdir += strlen(root);
-    SNFORMAT_S(cpa->result, cpa->result_len, 2, cpa->path, cpa->path_len, subdir, strlen(subdir));
-    return 0;
-}
-
-struct PathContext {
-    char *name;
-    size_t name_len;
-    sqlite3 *db;
-    size_t id;
-    ino_t inode;
-};
-
 static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
 {
-    struct PathContext *pc = (struct PathContext *) sqlite3_user_data(context);
-    const ino_t inode = sqlite3_value_int64(argv[0]);
+    const size_t id = (size_t) (uintptr_t) sqlite3_user_data(context);
+    const ino_t pinode = (ino_t) sqlite3_value_int64(argv[0]);
+    char * name = (char *) sqlite3_value_text(argv[1]);
 
-    char sql[MAXSQL];
+    const char * prefix = gps[id].gpath;
+    char buf[MAXPATH];
+    if (pinode == 0) {
+        /* summary */
+        /* there are two copies of the top level directory */
+        /* name, so remove the first path from the name */
+        char *p = name;
+        while (*p && (*p != '/')) {
+            p++;
+        }
+        p++;
 
-    SNPRINTF(sql, MAXSQL, "SELECT (SELECT name FROM summary WHERE isroot == 1), (SELECT name FROM summary WHERE inode == %" STAT_ino ")", inode);
-
-    char constructed_path[MAXPATH];
-    struct ConstructPathArgs cpa;
-    cpa.path = pc->name;
-    cpa.path_len = pc->name_len;
-    cpa.result = constructed_path;
-    cpa.result_len = sizeof(constructed_path);
-
-    char *err = NULL;
-    if (sqlite3_exec(pc->db, sql, construct_path, &cpa, &err) != SQLITE_OK) {
-        SNPRINTF(constructed_path, MAXPATH, "Error: Could not construct path starting: %s\n", err);
-        sqlite3_result_error(context, constructed_path, -1);
-        sqlite3_free(err);
-        return;
+        SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, p, strlen(p));
     }
-
-    sqlite3_result_text(context, constructed_path, -1, SQLITE_TRANSIENT);
+    else {
+        /* entries */
+        /* just append the name */
+        SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, name, strlen(name));
+    }
+    sqlite3_result_text(context, buf, -1, SQLITE_TRANSIENT);
 
     return;
 }
