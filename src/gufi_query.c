@@ -589,9 +589,6 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     debug_end(open_call);
     #endif
 
-    #ifdef ADDQUERYFUNCS
-    debug_start(addqueryfuncs_call);
-    /* this is needed to add some query functions like path() uidtouser() gidtogroup() */
     struct DirData dd = {0};
     if (db) {
         char * err = NULL;
@@ -600,7 +597,12 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
             sqlite3_free(err);
             goto close_db;
         }
+    }
 
+    /* this is needed to add some query functions like path() uidtouser() gidtogroup() */
+    #ifdef ADDQUERYFUNCS
+    debug_start(addqueryfuncs_call);
+    if (db) {
         if (addqueryfuncs(db, id, work->level, work->root) != 0) {
             fprintf(stderr, "Could not add functions to sqlite\n");
         }
