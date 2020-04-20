@@ -100,8 +100,9 @@ struct BottomUp {
     struct {
         pthread_mutex_t mutex;
         size_t remaining;
-        size_t total; /* doesn't have to be in here */
     } refs;
+    size_t subdir_count;
+    size_t subnondir_count;
     struct sll subdirs;
     struct sll subnondirs;
     struct BottomUp * parent;
