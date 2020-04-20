@@ -218,7 +218,8 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 
     timestamp_start(init);
     pthread_mutex_init(&bu->refs.mutex, NULL);
-    bu->refs.total = 0;
+    bu->subdir_count = 0;
+    bu->subnondir_count = 0;
     sll_init(&bu->subdirs);
     sll_init(&bu->subnondirs);
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "init", init);
@@ -263,7 +264,7 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
                 );
 
             /* count how many subdirectories this directory has */
-            bu->refs.total++;
+            bu->subdir_count++;
         }
         else {
             if (ua->track_non_dirs) {
@@ -273,6 +274,7 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
                       #endif
                 );
             }
+            bu->subnondir_count++;
         }
         timestamp_end(ua->timestamp_buffers, id, ts_buf, "track", track_entry);
     }
@@ -283,8 +285,8 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "closedir", close_dir);
 
     /* if there are subdirectories, this directory cannot go back up just yet */
-    bu->refs.remaining = bu->refs.total;
-    if (bu->refs.total) {
+    bu->refs.remaining = bu->subdir_count;
+    if (bu->subdir_count) {
         timestamp_start(enqueue_subdirs);
         sll_loop(&bu->subdirs, node)  {
             struct BottomUp *child = (struct BottomUp *) sll_node_data(node);

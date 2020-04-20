@@ -90,6 +90,7 @@ struct RollUpStats {
     struct sll subdirs;
 
     /* counts */
+    size_t empty_dirs;
     size_t not_processed;
     size_t not_rolledup;
     size_t successful_rollup[5];
@@ -172,11 +173,13 @@ do {                                                                    \
 } while (0)
 
 void print_stats(struct RollUpStats * stats, const size_t threads) {
+    size_t empty_dirs = 0;
     size_t not_processed = 0;
     size_t not_rolledup = 0;
     size_t successful_rollups[5] = {0};
     size_t failed_rollups[5] = {0};
     for(size_t i = 0; i < threads; i++) {
+        empty_dirs += stats[i].empty_dirs;
         not_processed += stats[i].not_processed;
         not_rolledup  += stats[i].not_rolledup;
         for(size_t j = 1; j < 5; j++) {
@@ -194,10 +197,11 @@ void print_stats(struct RollUpStats * stats, const size_t threads) {
     /* the entries stat includes cumulative rollups, not just stats from the top level of a rolled up subtree */
     sll_size_t_stats("Remaining subdirs", stats, subdirs, threads, 7);
     const size_t failed = rollup_distribution("Failed rollups", failed_rollups);
-    fprintf(stderr, "Total: %20zu\n", not_processed +
-                                      not_rolledup +
-                                      successful +
-                                      failed);
+    fprintf(stderr, "Total: %20zu (%zu empty)\n", not_processed +
+                                                  not_rolledup +
+                                                  successful +
+                                                  failed,
+                                                  empty_dirs);
 }
 
 /* main data being passed around during walk */
@@ -596,7 +600,7 @@ void rollup(void * args timestamp_sig) {
                     value = 1;
                 }
                 else {
-                    value = child->data.refs.total;
+                    value = child->data.subdir_count;
                 }
 
                 sll_push(&stats[id].subdirs, (void *) (uintptr_t) value);
