@@ -105,10 +105,10 @@ size_t rollup_distribution(const char * name, size_t * distribution) {
     size_t total = 0;
     fprintf(stderr, "%s:\n", name);
     for(size_t i = 1; i < 5; i++) {
-        fprintf(stderr, "    %zu: %20zu\n", i, distribution[i]);
+        fprintf(stderr, "    %zu: %25zu\n", i, distribution[i]);
         total += distribution[i];
     }
-    fprintf(stderr, "    Total: %16zu\n", total);
+    fprintf(stderr, "    Total: %21zu\n", total);
     return total;
 }
 
@@ -172,7 +172,7 @@ do {                                                                    \
     sll_destroy(&all, 0);                                               \
 } while (0)
 
-void print_stats(struct RollUpStats * stats, const size_t threads) {
+void print_stats(char ** paths, const int path_count, struct RollUpStats * stats, const size_t threads) {
     size_t empty_dirs = 0;
     size_t not_processed = 0;
     size_t not_rolledup = 0;
@@ -188,16 +188,28 @@ void print_stats(struct RollUpStats * stats, const size_t threads) {
         }
     }
 
-    fprintf(stderr, "Not processed: %12zu\n", not_processed);
-    fprintf(stderr, "Not rolled up: %12zu\n", not_rolledup);
+    fprintf(stderr, "Roll up of ");
+    if (path_count) {
+        fprintf(stderr, "%s", paths[0]);
+        for(int i = 1; i < path_count; i++) {
+            fprintf(stderr, ", %s", paths[i]);
+        }
+    }
+
+    if (in.dry_run) {
+        fprintf(stderr, " (dry run)");
+    }
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Not processed: %17zu\n", not_processed);
+    fprintf(stderr, "Not rolled up: %17zu\n", not_rolledup);
     const size_t successful = rollup_distribution("Successful rollups", successful_rollups);
     fprintf(stderr, "\n");
-    sll_size_t_stats("Rollup occuring at a level", stats, levels, threads, 7);
+    sll_size_t_stats("Rollup occuring at a level", stats, levels, threads, 12);
     fprintf(stderr, "\n");
     /* the entries stat includes cumulative rollups, not just stats from the top level of a rolled up subtree */
-    sll_size_t_stats("Remaining subdirs", stats, subdirs, threads, 7);
+    sll_size_t_stats("Remaining subdirs", stats, subdirs, threads, 12);
     const size_t failed = rollup_distribution("Failed rollups", failed_rollups);
-    fprintf(stderr, "Total: %20zu (%zu empty)\n", not_processed +
+    fprintf(stderr, "Total: %25zu (%zu empty)\n", not_processed +
                                                   not_rolledup +
                                                   successful +
                                                   failed,
@@ -647,7 +659,10 @@ int main(int argc, char * argv[]) {
     }
     #endif
 
-    const int rc = parallel_bottomup(argv + idx, argc - idx,
+    argv += idx;
+    argc -= idx;
+
+    const int rc = parallel_bottomup(argv, argc,
                                      in.maxthreads,
                                      sizeof(struct RollUp), rollup,
                                      0,
@@ -667,7 +682,7 @@ int main(int argc, char * argv[]) {
 
     #endif
 
-    print_stats(stats, in.maxthreads);
+    print_stats(argv, argc, stats, in.maxthreads);
 
     for(int i = 0; i < in.maxthreads; i++) {
         #ifdef DEBUG
