@@ -111,6 +111,39 @@ def parse_size(size):
 def need_aggregation(args):
     return args.num_results or args.smallest or args.largest
 
+def build_init(args):
+    '''Build the CREATE TABLE query'''
+    init = ['name TEXT']
+
+    if args.amin or args.atime:
+        init += ['atime INT64']
+
+    if args.cmin or args.ctime:
+        init += ['ctime INT64']
+
+    if args.mmin or args.mtime or args.newer:
+        init += ['mtime INT64']
+
+    if args.empty or args.size or args.smallest or args.largest:
+        init += ['size INT64']
+
+    if args.executable or args.readable or args.writable:
+        init += ['mode INT64']
+
+    if args.uid or args.user:
+        init += ['uid INT64']
+
+    if args.gid or args.group:
+        init += ['gid INT64']
+
+    if args.links:
+        init += ['nlinks INT64']
+
+    if args.type:
+        init += ['type TEXT']
+
+    return init
+
 def build_where(args, root_uid = 0, root_gid = 0):
     '''Build the WHERE clause'''
     where = []
@@ -294,6 +327,9 @@ def build_order_by(args):
 
     if args.largest:
         order_by += ['size DESC']
+
+    # order by name last so it doesnt break user requested ordering
+    order_by += ['name ASC']
 
     return order_by
 
@@ -666,6 +702,7 @@ def run(argv, config_path):
                       '-I', I,
                       '-J', J,
                       '-G', G]
+
     else:
         S = gufi_common.build_query(output,
                                     ['summary'],
