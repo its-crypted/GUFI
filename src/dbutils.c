@@ -742,37 +742,44 @@ int inserttreesumdb(const char *name, sqlite3 *sdb, struct sum *su,int rectype,i
     return 0;
 }
 
+/* static void path(sqlite3_context *context, int argc, sqlite3_value **argv) */
+/* { */
+/*     const size_t id = (size_t) (uintptr_t) sqlite3_user_data(context); */
+/*     const ino_t pinode = (ino_t) sqlite3_value_int64(argv[0]); */
+/*     char * name = (char *) sqlite3_value_text(argv[1]); */
+
+/*     const char * prefix = gps[id].gpath; */
+/*     if (pinode == 0) { */
+/*         /\* summary *\/ */
+/*         /\* there are two copies of the top level directory *\/ */
+/*         /\* name, so remove the first path from the name *\/ */
+/*         while (*name && (*name != '/')) { */
+/*             name++; */
+/*         } */
+/*         name++; */
+/*     } */
+/*     else { */
+/*         /\* entries *\/ */
+/*         /\* just append the name *\/ */
+/*     } */
+
+/*     const size_t len = strlen(name); */
+/*     char buf[MAXPATH]; */
+/*     if (len) { */
+/*         SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, name, len); */
+/*     } */
+/*     else { */
+/*         SNFORMAT_S(buf, MAXPATH, 1, prefix, strlen(prefix)); */
+/*     } */
+/*     sqlite3_result_text(context, buf, -1, SQLITE_TRANSIENT); */
+
+/*     return; */
+/* } */
+
 static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
 {
     const size_t id = (size_t) (uintptr_t) sqlite3_user_data(context);
-    const ino_t pinode = (ino_t) sqlite3_value_int64(argv[0]);
-    char * name = (char *) sqlite3_value_text(argv[1]);
-
-    const char * prefix = gps[id].gpath;
-    if (pinode == 0) {
-        /* summary */
-        /* there are two copies of the top level directory */
-        /* name, so remove the first path from the name */
-        while (*name && (*name != '/')) {
-            name++;
-        }
-        name++;
-    }
-    else {
-        /* entries */
-        /* just append the name */
-    }
-
-    const size_t len = strlen(name);
-    char buf[MAXPATH];
-    if (len) {
-        SNFORMAT_S(buf, MAXPATH, 3, prefix, strlen(prefix), "/", 1, name, len);
-    }
-    else {
-        SNFORMAT_S(buf, MAXPATH, 1, prefix, strlen(prefix));
-    }
-    sqlite3_result_text(context, buf, -1, SQLITE_TRANSIENT);
-
+    sqlite3_result_text(context, gps[id].gpath, -1, SQLITE_TRANSIENT);
     return;
 }
 
