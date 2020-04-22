@@ -555,9 +555,7 @@ void rollup(void * args timestamp_sig) {
 
     timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_curr_db);
 
-    #ifdef DEBUG
     struct RollUpStats * stats = (struct RollUpStats *) dir->data.extra_args;
-    #endif
 
     if (dst) {
         const int rollup_score = can_rollup(dir, dst timestamp_args);
