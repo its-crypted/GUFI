@@ -74,7 +74,7 @@ GUFI_FIND="${ROOT}/test/regression/gufi_find.py"
 
 # output directories
 SRCDIR="prefix"
-INDEXROOT="$(realpath ${SRCDIR}.gufi)"
+INDEXROOT="${SRCDIR}.gufi"
 
 source ${ROOT}/test/regression/setup.sh "${ROOT}" "${SRCDIR}" "${INDEXROOT}"
 
