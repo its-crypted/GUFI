@@ -80,21 +80,27 @@ extern int errno;
 
 #define SUBDIR_ATTACH_NAME "subdir"
 
+/* statistics stored when processing each directory */
+/* this is the type stored in the RollUpStats struct sll variables */
+struct DirStats {
+    char path[MAXPATH];
+
+    size_t level;           /* level this directory is at */
+
+    size_t subdir_count;    /* unrolled up count from readdir, not summary */
+    size_t subnondir_count; /* rolled up count from entries and subdir.pentries */
+
+    int    score;           /* roll up score regardless of success or failure */
+    int    success;         /* whether or not the roll up succeeded */
+};
+
 /* per thread stats */
 struct RollUpStats {
-    /* level of a successful rollup */
-    struct sll levels;
+    struct sll not_processed;
+    struct sll not_rolled_up;
+    struct sll rolled_up;
 
-    /* number of directories immediately under the top level of a roll up */
-    /* sum this to get final count of dirs that need processing */
-    struct sll subdirs;
-
-    /* counts */
-    size_t empty_dirs;
-    size_t not_processed;
-    size_t not_rolledup;
-    size_t successful_rollup[5];
-    size_t failed_rollup[5];
+    size_t remaining;  /* subdirectories that remain after rolling up */
 
     #ifdef DEBUG
     struct OutputBuffers * print_buffers;
@@ -103,12 +109,12 @@ struct RollUpStats {
 
 size_t rollup_distribution(const char * name, size_t * distribution) {
     size_t total = 0;
-    fprintf(stderr, "%s:\n", name);
+    fprintf(stderr, "    %s:\n", name);
     for(size_t i = 1; i < 5; i++) {
-        fprintf(stderr, "    %zu: %25zu\n", i, distribution[i]);
+        fprintf(stderr, "        %zu: %19zu\n", i, distribution[i]);
         total += distribution[i];
     }
-    fprintf(stderr, "    Total: %21zu\n", total);
+    fprintf(stderr, "        Total: %15zu\n", total);
     return total;
 }
 
@@ -117,36 +123,30 @@ int compare_size_t(const void * lhs, const void * rhs) {
     return (*(size_t *) lhs - *(size_t *) rhs);
 }
 
-#define sll_size_t_stats(name, stats, var, threads, width)              \
+#define sll_dir_stats(name, all, var, threads, width)                   \
 do {                                                                    \
-    struct sll all;                                                     \
-    sll_init(&all);                                                     \
-    for(int i = 0; i < threads; i++) {                                  \
-        sll_move_append(&all, &stats[i].var);                           \
-    }                                                                   \
-                                                                        \
-    const size_t count = sll_get_size(&all);                            \
+    const size_t count = sll_get_size(all);                             \
     if (count == 0) {                                                   \
-        fprintf(stderr, "    No " name " stats\n");                     \
         break;                                                          \
     }                                                                   \
+                                                                        \
     size_t * array = malloc(count * sizeof(size_t));                    \
     size_t min = (size_t) -1;                                           \
     size_t max = 0;                                                     \
     size_t sum = 0;                                                     \
     size_t i = 0;                                                       \
-    sll_loop(&all, node) {                                              \
-        const size_t value = (size_t) (uintptr_t) sll_node_data(node);  \
-        if (value < min) {                                              \
-            min = value;                                                \
+    sll_loop(all, node) {                                               \
+        struct DirStats * ds = (struct DirStats *) sll_node_data(node); \
+        if (ds->var < min) {                                            \
+            min = ds->var;                                              \
         }                                                               \
                                                                         \
-        if (value > max) {                                              \
-            max = value;                                                \
+        if (ds->var > max) {                                            \
+            max = ds->var;                                              \
         }                                                               \
                                                                         \
-        sum += value;                                                   \
-        array[i++] = value;                                             \
+        sum += ds->var;                                                 \
+        array[i++] = ds->var;                                           \
     }                                                                   \
                                                                         \
     qsort(array, count, sizeof(size_t), compare_size_t);                \
@@ -157,70 +157,102 @@ do {                                                                    \
         median /= 2;                                                    \
     }                                                                   \
                                                                         \
-    free(array);                                                        \
+    const double avg = ((double) sum) / count;                          \
                                                                         \
-    const double average = ((double) sum) / count;                      \
-                                                                        \
-    fprintf(stderr, "    " name ":\n");                                 \
-    fprintf(stderr, "        count:      %" #width "zu\n", count);      \
-    fprintf(stderr, "        min:        %" #width "zu\n", min);        \
-    fprintf(stderr, "        max:        %" #width "zu\n", max);        \
+    fprintf(stderr, "    %s:\n", name);                                 \
+    fprintf(stderr, "        min:        %" #width "zu\n",  min);       \
+    fprintf(stderr, "        max:        %" #width "zu\n",  max);       \
     fprintf(stderr, "        median:     %" #width ".2f\n", median);    \
-    fprintf(stderr, "        sum:        %" #width "zu\n", sum);        \
-    fprintf(stderr, "        average:    %" #width ".2f\n", average);   \
+    fprintf(stderr, "        sum:        %" #width "zu\n",  sum);       \
+    fprintf(stderr, "        average:    %" #width ".2f\n", avg);       \
                                                                         \
-    sll_destroy(&all, 0);                                               \
+    free(array);                                                        \
 } while (0)
 
+void print_stanza(const char * name, struct sll * stats, const size_t threads) {
+    fprintf(stderr, "%s %*zu\n", name, (int) (29 - strlen(name)), sll_get_size(stats));
+    sll_dir_stats("Subdirectories", stats, subdir_count,    threads, 10);
+    sll_dir_stats("Files/Links",    stats, subnondir_count, threads, 10);
+    sll_dir_stats("Level",          stats, level,           threads, 10);
+    fprintf(stderr, "\n");
+}
+
+/* this function moves the sll stats up and deallocates them */
 void print_stats(char ** paths, const int path_count, struct RollUpStats * stats, const size_t threads) {
-    size_t empty_dirs = 0;
-    size_t not_processed = 0;
-    size_t not_rolledup = 0;
-    size_t successful_rollups[5] = {0};
-    size_t failed_rollups[5] = {0};
+    fprintf(stderr, "Roots:\n");
+    for(int i = 0; i < path_count; i++) {
+        fprintf(stderr, "    %s\n", paths[i]);
+    }
+
+    /* per-thread stats together */
+    struct sll not_processed;
+    sll_init(&not_processed);
+
+    struct sll not_rolled_up;
+    sll_init(&not_rolled_up);
+
+    struct sll rolled_up;
+    sll_init(&rolled_up);
+
+    size_t remaining = 0;
+
     for(size_t i = 0; i < threads; i++) {
-        empty_dirs += stats[i].empty_dirs;
-        not_processed += stats[i].not_processed;
-        not_rolledup  += stats[i].not_rolledup;
-        for(size_t j = 1; j < 5; j++) {
-            successful_rollups[j] += stats[i].successful_rollup[j];
-            failed_rollups[j]     += stats[i].failed_rollup[j];
-        }
+        sll_move_append(&not_processed, &stats[i].not_processed);
+        sll_move_append(&not_rolled_up, &stats[i].not_rolled_up);
+        sll_move_append(&rolled_up,     &stats[i].rolled_up);
+        remaining += stats[i].remaining;
     }
 
-    fprintf(stderr, "Roll up of ");
-    if (path_count) {
-        fprintf(stderr, "%s", paths[0]);
-        for(int i = 1; i < path_count; i++) {
-            fprintf(stderr, ", %s", paths[i]);
-        }
+    /* print stats of each type of directory */
+    print_stanza("Not Processed:", &not_processed, threads);
+    print_stanza("Not Rolled Up:", &not_rolled_up, threads);
+    print_stanza("Rolled Up:",     &rolled_up,     threads);
+
+    /* get distribution of roll up scores */
+    size_t successful[5] = {0};
+    size_t failed[5] = {0};
+    sll_loop(&rolled_up, node) {
+        struct DirStats * ds = (struct DirStats *) sll_node_data(node);
+        (ds->success?successful:failed)[ds->score]++;
     }
 
-    if (in.dry_run) {
-        fprintf(stderr, " (dry run)");
+    /* count empty directories */
+
+    /* do not count not_processed, since they do not have databases to scan */
+    size_t not_processed_empty = 0;
+
+    size_t not_rolled_up_empty = 0;
+    sll_loop(&not_rolled_up, node) {
+        struct DirStats * ds = (struct DirStats *) sll_node_data(node);
+        not_rolled_up_empty += !ds->subnondir_count;
     }
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Not processed: %17zu\n", not_processed);
-    fprintf(stderr, "Not rolled up: %17zu\n", not_rolledup);
-    const size_t successful = rollup_distribution("Successful rollups", successful_rollups);
-    fprintf(stderr, "\n");
-    sll_size_t_stats("Rollup occuring at a level", stats, levels, threads, 12);
-    fprintf(stderr, "\n");
-    /* the entries stat includes cumulative rollups, not just stats from the top level of a rolled up subtree */
-    sll_size_t_stats("Remaining subdirs", stats, subdirs, threads, 12);
-    const size_t failed = rollup_distribution("Failed rollups", failed_rollups);
-    fprintf(stderr, "Total: %25zu (%zu empty)\n", not_processed +
-                                                  not_rolledup +
-                                                  successful +
-                                                  failed,
-                                                  empty_dirs);
+    size_t rolled_up_empty = 0;
+    sll_loop(&rolled_up, node) {
+        struct DirStats * ds = (struct DirStats *) sll_node_data(node);
+        rolled_up_empty += !ds->subnondir_count;
+    }
+
+    const size_t empty = not_processed_empty + not_rolled_up_empty + rolled_up_empty;
+
+    rollup_distribution("Successful", successful);
+    rollup_distribution("Failed",     failed);
+
+    fprintf(stderr, "Drectories that need to be opened: %zu\n", remaining);
+    fprintf(stderr, "Total: %zu (%zu empty)\n",
+            sll_get_size(&not_processed) +
+            sll_get_size(&not_rolled_up) +
+            sll_get_size(&rolled_up),
+            empty);
+
+    sll_destroy(&rolled_up, 1);
+    sll_destroy(&not_rolled_up, 1);
+    sll_destroy(&not_processed, 1);
 }
 
 /* main data being passed around during walk */
 struct RollUp {
     struct BottomUp data;
     int rolledup;
-    size_t entries;
 };
 
 /* ************************************** */
@@ -421,6 +453,12 @@ end_can_rollup:
     return legal;
 }
 
+int add_entries_count(void * args, int count, char ** data, char ** columns) {
+    size_t * rows = (size_t *) args;
+    *rows += atoi(data[0]);
+    return 0;
+}
+
 /* drop pentries view */
 /* create pentries table */
 /* copy entries + pinode into pentries */
@@ -439,14 +477,27 @@ static const char rollup_subdir[] =
     "INSERT INTO pentries SELECT * FROM " SUBDIR_ATTACH_NAME ".pentries;"
     "INSERT INTO summary  SELECT NULL, s.name || '/' || sub.name, sub.type, sub.inode, sub.mode, sub.nlink, sub.uid, sub.gid, sub.size, sub.blksize, sub.blocks, sub.atime, sub.mtime, sub.ctime, sub.linkname, sub.xattrs, sub.totfiles, sub.totlinks, sub.minuid, sub.maxuid, sub.mingid, sub.maxgid, sub.minsize, sub.maxsize, sub.totltk, sub.totmtk, sub.totltm, sub.totmtm, sub.totmtg, sub.totmtt, sub.totsize, sub.minctime, sub.maxctime, sub.minmtime, sub.maxmtime, sub.minatime, sub.maxatime, sub.minblocks, sub.maxblocks, sub.totxattr, sub.depth, sub.mincrtime, sub.maxcrtime, sub.minossint1, sub.maxossint1, sub.totossint1, sub.minossint2, sub.maxossint2, sub.totossint2, sub.minossint3, sub.maxossint3, sub.totossint3, sub.minossint4, sub.maxossint4, sub.totossint4, sub.rectype, sub.pinode, 0, sub.rollupscore FROM summary as s, " SUBDIR_ATTACH_NAME ".summary as sub WHERE s.isroot == 1;";
 
+/* get number of non-dirs in this directory from the entries table */
+int get_nondirs(struct RollUp * rollup, struct DirStats * ds, sqlite3 * dst timestamp_sig) {
+    char * err = NULL;
+    const int exec_rc = sqlite3_exec(dst, "SELECT COUNT(*) FROM entries", add_entries_count, &ds->subnondir_count, &err);
+
+    if (exec_rc != SQLITE_OK) {
+        fprintf(stderr, "Warning: Failed to get entries row count from \"%s\": %s\n", rollup->data.name, err);
+    }
+    sqlite3_free(err);
+    return exec_rc;
+}
+
 /*
 @return < 0 - could not move entries into pentries
           0 - success
         > 0 - at least one subdirectory failed to be moved
 */
 int do_rollup(struct RollUp * rollup,
+              struct DirStats * ds,
               sqlite3 *dst,
-              const int rollup_score
+              const int dry_run
               timestamp_sig) {
     /* assume that this directory can be rolled up */
     /* can_rollup should have been called earlier  */
@@ -462,18 +513,20 @@ int do_rollup(struct RollUp * rollup,
     char * err = NULL;
     int exec_rc = SQLITE_OK;
 
-    /* set the rollup score in the SQL statement */
-    char rollup_current_dir[] = ROLLUP_CURRENT_DIR;
-    rollup_current_dir[rollup_score_offset] += rollup_score;
+    if (!dry_run) {
+        /* set the rollup score in the SQL statement */
+        char rollup_current_dir[] = ROLLUP_CURRENT_DIR;
+        rollup_current_dir[rollup_score_offset] += ds->score;
 
-    timestamp_start(rollup_current_dir);
-    exec_rc = sqlite3_exec(dst, rollup_current_dir, NULL, NULL, &err);
-    timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_current_dir", rollup_current_dir);
+        timestamp_start(rollup_current_dir);
+        exec_rc = sqlite3_exec(dst, rollup_current_dir, NULL, NULL, &err);
+        timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_current_dir", rollup_current_dir);
 
-    if (exec_rc != SQLITE_OK) {
-        fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
-        rc = -1;
-        goto end_rollup;
+        if (exec_rc != SQLITE_OK) {
+            fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
+            rc = -1;
+            goto end_rollup;
+        }
     }
 
     /* if any subdir fails to roll up, record it */
@@ -497,12 +550,26 @@ int do_rollup(struct RollUp * rollup,
 
         /* roll up the subdir into this dir */
         if (!child_failed) {
-            timestamp_start(rollup_subdir);
-            exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
-            timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdir", rollup_subdir);
-            if (exec_rc != SQLITE_OK) {
-                fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
-                child_failed = 1;
+            /* /\* get number of non-dirs in this subdirectory *\/ */
+            /* timestamp_start(rollup_nondir_count); */
+            /* exec_rc = sqlite3_exec(dst, "SELECT COUNT(*) FROM " SUBDIR_ATTACH_NAME ".pentries", add_entries_count, &ds->subnondir_count, &err); */
+            /* timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_nondir_count", rollup_nondir_count); */
+
+            /* if (exec_rc != SQLITE_OK) { */
+            /*     fprintf(stderr, "Warning: Failed to get pentries row count from \"%s\": %s\n", child->name, err); */
+            /*     sqlite3_free(err); */
+            /*     err = NULL; */
+            /* } */
+
+            if (!dry_run) {
+                /* roll up */
+                timestamp_start(rollup_subdir);
+                exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
+                timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdir", rollup_subdir);
+                if (exec_rc != SQLITE_OK) {
+                    fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
+                    child_failed = 1;
+                }
             }
         }
 
@@ -522,7 +589,7 @@ int do_rollup(struct RollUp * rollup,
         rc = (int) failed_rollup;
     }
     else {
-        rollup->rolledup = rollup_score;
+        rollup->rolledup = ds->score;
     }
 
 end_rollup:
@@ -533,15 +600,32 @@ end_rollup:
 }
 
 void rollup(void * args timestamp_sig) {
+    timestamp_create_buffer(4096);
+
+    timestamp_start(setup);
+
     struct RollUp * dir = (struct RollUp *) args;
     dir->rolledup = 0;
 
     const size_t id = dir->data.tid.up;
-
-    timestamp_create_buffer(4096);
+    const size_t name_len = strlen(dir->data.name);
 
     char dbname[MAXPATH];
-    SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, dir->data.name);
+    SNFORMAT_S(dbname, MAXPATH, 3, dir->data.name, name_len, "/", 1, DBNAME, DBNAME_LEN);
+
+    struct RollUpStats * stats = (struct RollUpStats *) dir->data.extra_args;
+
+    /* get statistics out of BottomUp */
+    struct DirStats * ds = malloc(sizeof(struct DirStats));
+    SNPRINTF(ds->path, MAXPATH, "%s", dir->data.name);
+    SNFORMAT_S(ds->path, MAXPATH, 1, dir->data.name, name_len);
+    ds->subdir_count = dir->data.subdir_count;
+    ds->subnondir_count = 0;
+    ds->level = dir->data.level;
+    ds->score = 0;
+    ds->success = 0;
+
+    timestamp_end(timestamp_buffers, id, ts_buf, "setup", setup);
 
     /* open the database file here to reduce number of open calls */
     timestamp_start(open_curr_db);
@@ -552,14 +636,19 @@ void rollup(void * args timestamp_sig) {
                            , NULL, NULL
                            #endif
         );
-
     timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_curr_db);
 
-    struct RollUpStats * stats = (struct RollUpStats *) dir->data.extra_args;
+    /* get count of number of non-directories that will be affected */
+    timestamp_start(nondir_count);
+    get_nondirs(dir, ds, dst timestamp_args);
+    timestamp_end(timestamp_buffers, id, ts_buf, "nondir_count", nondir_count);
 
+    /* can attempt to roll up */
     if (dst) {
-        const int rollup_score = can_rollup(dir, dst timestamp_args);
+        /* check if rollup is allowed */
+        ds->score = can_rollup(dir, dst timestamp_args);
 
+        /* print roll up scores */
         #ifdef DEBUG
         #ifdef PRINT_ROLLUP_SCORE
         struct OutputBuffer * obuf = &(stats->print_buffers->buffers[id]);
@@ -579,46 +668,38 @@ void rollup(void * args timestamp_sig) {
         memcpy(obuf->buf + obuf->filled, dir->data.name, len - 3);
 
         char score[] = " 0\n";
-        score[1] += rollup_score;
+        score[1] += ds->score;
         memcpy(obuf->buf + obuf->filled + len - 3, score, 3);
 
         obuf->filled += len;
         #endif
         #endif
 
-        if (rollup_score > 0) {
-            if (in.dry_run || (do_rollup(dir, dst, rollup_score timestamp_args) == 0)) {
-                dir->rolledup = rollup_score;
-                sll_push(&stats[id].levels, (void *) (uintptr_t) dir->data.level);
-                stats[id].successful_rollup[rollup_score]++;
-            }
-            else {
-                stats[id].failed_rollup[rollup_score]++;
-            }
+        /* if can roll up */
+        if (ds->score > 0) {
+            /* keep track of all successful and failed rollups in rolled_up */
+            ds->success = (do_rollup(dir, ds, dst, in.dry_run timestamp_args) == 0);
+            sll_push(&stats[id].rolled_up, ds);
         }
         else {
-            stats[id].not_rolledup++;
+            /* is not allowed to roll up */
+
+            sll_push(&stats[id].not_rolled_up, ds);
         }
 
         /* if roll up failed, then all subdirs are the top of their subtrees */
-        /* also handle root directory if it was rolled up */
-        if ((rollup_score == 0) || ((rollup_score > 0) && !dir->data.parent)) {
-            sll_loop(&dir->data.subdirs, node) {
-                struct RollUp * child = (struct RollUp *) sll_node_data(node);
-                size_t value = 0;
-                if (child->rolledup) {
-                    value = 1;
-                }
-                else {
-                    value = child->data.subdir_count;
-                }
+        if (ds->score == 0) {
+            stats[id].remaining += sll_get_size(&dir->data.subdirs);
+        }
 
-                sll_push(&stats[id].subdirs, (void *) (uintptr_t) value);
-            }
+        /* if roll up succeeded at the root directory, count it as a remaining directory */
+        if (!dir->data.parent && (ds->score > 0)) {
+            stats[id].remaining++;
         }
     }
     else {
-        stats[id].not_processed++;
+        /* did not check if can roll up */
+        sll_push(&stats[id].not_processed, ds);
     }
 
     closedb(dst);
@@ -648,8 +729,10 @@ int main(int argc, char * argv[]) {
 
     struct RollUpStats * stats = calloc(in.maxthreads, sizeof(struct RollUpStats));
     for(int i = 0; i < in.maxthreads; i++) {
-        sll_init(&stats[i].levels);
-        sll_init(&stats[i].subdirs);
+        sll_init(&stats[i].not_processed);
+        sll_init(&stats[i].not_rolled_up);
+        sll_init(&stats[i].rolled_up);
+        stats[i].remaining = 0;
     }
 
     #ifdef DEBUG
@@ -690,8 +773,9 @@ int main(int argc, char * argv[]) {
         #ifdef DEBUG
         stats[i].print_buffers = NULL;
         #endif
-        sll_destroy(&stats[i].levels, 0);
-        sll_destroy(&stats[i].subdirs, 0);
+        sll_destroy(&stats[i].rolled_up, 0);
+        sll_destroy(&stats[i].not_rolled_up, 0);
+        sll_destroy(&stats[i].not_processed, 0);
     }
     free(stats);
 
