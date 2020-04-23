@@ -245,9 +245,9 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     /* fprintf(stderr, "Drectories that need to be opened: %zu\n", remaining); */
     fprintf(stderr, "Total: %zu (%zu empty)\n", total, empty);
 
-    sll_destroy(&rolled_up, 1);
-    sll_destroy(&not_rolled_up, 1);
-    sll_destroy(&not_processed, 1);
+    sll_destroy(&rolled_up, free);
+    sll_destroy(&not_rolled_up, free);
+    sll_destroy(&not_processed, free);
 }
 
 /* main data being passed around during walk */

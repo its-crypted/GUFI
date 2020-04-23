@@ -71,6 +71,10 @@ import time
 import gufi_common
 import gufi_config
 
+# table names
+SUMMARY='summary'
+PENTRIES='pentries'
+
 # location of this file
 PATH = os.path.realpath(__file__)
 
@@ -155,43 +159,43 @@ def build_where(args, root_uid = 0, root_gid = 0):
     #     # where  += ['(uid == {}) OR (gid in {})'.format(os.getuid(), '(' + str(os.getgroups())[1:-1] + ')')]
 
     if args.amin is not None:
-        where += ['({} - atime) / 60 == {}'.format(now, args.amin)]
+        where += ['({} - {}.atime) / 60 == {}'.format(now, table, args.amin)]
 
     # if args.anewer is not None:
 
     if args.atime is not None:
-        where += ['({} - atime) / {} == {} '.format(now, SECONDS_PER_DAY, args.atime)]
+        where += ['({} - {}.atime) / {} == {} '.format(now, table, SECONDS_PER_DAY, args.atime)]
 
     if args.cmin is not None:
-        where += ['({} - ctime) / 60 == {}'.format(now, args.cmin)]
+        where += ['({} - {}.ctime) / 60 == {}'.format(now, table, args.cmin)]
 
     # if args.cnewer is not None:
 
     if args.ctime is not None:
-        where += ['({} - ctime) / {} == {} '.format(now, SECONDS_PER_DAY, args.ctime)]
+        where += ['({} - {}.ctime) / {} == {} '.format(now, table, SECONDS_PER_DAY, args.ctime)]
 
     if args.empty == True:
-        where += ['size == 0', '(type == \'f\') OR (type == \'d\')']
+        where += ['{}.size == 0'.format(table), '({}.type == \'f\') OR ({}.type == \'d\')'.format(table, table)]
 
     if args.executable == True:
-        where += ['(mode & 64) == 64'] # 0100 have to use decimal or hexadecimal value because sqlite3 doesn't support octal
+        where += ['({}.mode & 64) == 64'.format(table)] # 0100 have to use decimal or hexadecimal value because sqlite3 doesn't support octal
 
     if args.false == True:
         where += ['0']
 
     if args.gid is not None:
-        where += ['gid == {}'.format(args.gid)]
+        where += ['{}.gid == {}'.format(table, args.gid)]
 
     if args.group is not None:
-        where += ['gid == {}'.format(args.group)]
+        where += ['{}.gid == {}'.format(table, args.group)]
 
     # if args.ilname is not None:
 
     if args.iname is not None:
-        where += ['name REGEXP \'(?i){}\'"'.format(args.iname)]
+        where += ['{}.name REGEXP \'(?i){}\'"'.format(table, args.iname)]
 
     if args.inum is not None:
-        where += ['inode == {}'.format(args.inum)]
+        where += ['{}.inode == {}'.format(table, args.inum)]
 
     # Behaves in the same way as -iwholename. This option is deprecated, so please do not use it.
     # if args.ipath is not None:
@@ -201,13 +205,13 @@ def build_where(args, root_uid = 0, root_gid = 0):
     # if args.iwholename is not None:
 
     if args.links is not None:
-        where += ['nlink == {}'.format(args.links)]
+        where += ['{}.nlink == {}'.format(table, args.links)]
 
     if args.lname is not None:
-        where += ['type == \'f\'', 'linkname REGEXP \'(?i){}\'"'.format(args.lname)]
+        where += ['{}.type == \'f\'', '{}.linkname REGEXP \'(?i){}\'"'.format(table, args.lname)]
 
     if args.mmin is not None:
-        where += ['({} - mtime) / 60 == {}'.format(now, args.mmin)]
+        where += ['({} - {}.mtime) / 60 == {}'.format(now, table, args.mmin)]
 
     if args.mtime is not None:
         if len(args.mtime) > 2:
@@ -223,13 +227,13 @@ def build_where(args, root_uid = 0, root_gid = 0):
                 comp = '>'
                 mtime = mtime[1:]
 
-            where += ['({} - mtime) / {} {} {}'.format(now, SECONDS_PER_DAY, comp, mtime)]
+            where += ['({} - {}.mtime) / {} {} {}'.format(now, table, SECONDS_PER_DAY, comp, mtime)]
 
     if args.name is not None:
-        where += [' OR '.join(['(name REGEXP \'{}\')'.format(name) for name in args.name])]
+        where += [' OR '.join(['({}.name REGEXP \'{}\')'.format(table, name) for name in args.name])]
 
     if args.newer is not None:
-        where += ['mtime > {}'.format(args.newer.st_mtime)]
+        where += ['{}.mtime > {}'.format(table, args.newer.st_mtime)]
 
     # if args.newerXY is not None:
 
@@ -241,13 +245,13 @@ def build_where(args, root_uid = 0, root_gid = 0):
     # if args.perm is not None:
 
     if args.readable == True:
-        where += ['(mode & 256) == 256'] # 0400 have to use decimal or hexadecimal value because sqlite3 doesn't support octal
+        where += ['({}.mode & 256) == 256'.format(table)] # 0400 have to use decimal or hexadecimal value because sqlite3 doesn't support octal
 
     # # not handled here
     # if args.regex is not None:
 
     if args.samefile is not None:
-        where += ['inode == {}'.format(args.samefile.st_ino)]
+        where += ['{}.inode == {}'.format(name, args.samefile.st_ino)]
 
     if args.size is not None:
         if len(args.size) == 1:
@@ -259,7 +263,7 @@ def build_where(args, root_uid = 0, root_gid = 0):
                 percent_range = sorted(args.size_percent_range)
                 lower = size + size * percent_range[0] / 100.0
                 higher = size + size * percent_range[1] / 100.0
-                where += ['{} <= size'.format(lower), 'size <= {}'.format(higher)]
+                where += ['{} <= {}.size'.format(lower, table), '{}.size <= {}'.format(table, higher)]
             # size <=/=/>= x
             else:
                 comp = '=='
@@ -268,7 +272,7 @@ def build_where(args, root_uid = 0, root_gid = 0):
                 elif prefix == '-':
                     comp = '<'
 
-                where += ['size {} {}'.format(comp, size)]
+                where += ['{}.size {} {}'.format(table, comp, size)]
         # if there are multiple sizes, do not process args.size_percent_range
         elif len(args.size) == 2:
             if args.size_percent_range is not None:
@@ -283,7 +287,7 @@ def build_where(args, root_uid = 0, root_gid = 0):
                 elif prefix == '-':
                     comp = '<'
 
-                where += ['size {} {}'.format(comp, size)]
+                where += ['{}.size {} {}'.format(table, comp, size)]
         else:
             raise exceptions.Exception('Up to 2 -size flags can be provided. Got {}: {}.'.format(len(args.size), args.size))
 
@@ -291,20 +295,20 @@ def build_where(args, root_uid = 0, root_gid = 0):
         where += ['1']
 
     if args.type is not None:
-        where += ['(type == "{}")'.format(args.type)]
+        where += ['({}.type == "{}")'.format(table, args.type)]
 
     if args.uid is not None:
-        where += [' OR '.join(['(uid == {})'.format(uid) for uid in args.uid])]
+        where += [' OR '.join(['({}.uid == {})'.format(table, uid) for uid in args.uid])]
 
     # if args.used is not None:
 
     if args.user is not None:
-        where += ['uid == {}'.format(args.user)]
+        where += ['{}.uid == {}'.format(table, args.user)]
 
     # if args.wholename is not None:
 
     if args.writable == True:
-        where += ['(mode & 128) == 128'] # 0200 have to use decimal or hexadecimal value because sqlite3 doesn't support octal
+        where += ['({}.mode & 128) == 128'.format(table)] # 0200 have to use decimal or hexadecimal value because sqlite3 doesn't support octal
 
     # if args.xtype is not None:
 
@@ -312,24 +316,24 @@ def build_where(args, root_uid = 0, root_gid = 0):
 
     return where
 
-def build_group_by(args):
+def build_group_by(args, table):
     '''Build the GROUP BY clause'''
     group_by = []
 
     return group_by
 
-def build_order_by(args):
+def build_order_by(args, table):
     '''Build the ORDER BY clause'''
     order_by = []
 
     if args.smallest:
-        order_by += ['size ASC']
+        order_by += ['{}.size ASC'.format(table)]
 
     if args.largest:
-        order_by += ['size DESC']
+        order_by += ['{}.size DESC'.format(table)]
 
     # order by name last so it doesnt break user requested ordering
-    order_by += ['name ASC']
+    order_by += ['{}.name ASC'.format(table)]
 
     return order_by
 
@@ -693,9 +697,9 @@ def run(argv, config_path):
                                                                            args.num_results))
         G = gufi_common.build_query(output,
                                     [args.inmemory_name],
-                                    where,
-                                    group_by,
-                                    order_by,
+                                    build_where(args, args.inmemory_name),
+                                    build_group_by(args, args.inmemory_name),
+                                    build_order_by(args, args.inmemory_name),
                                     args.num_results)
 
         query_cmd += ['-e', '0',

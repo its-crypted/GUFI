@@ -774,8 +774,24 @@ int inserttreesumdb(const char *name, sqlite3 *sdb, struct sum *su,int rectype,i
 
 static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
 {
+    /* get thread id */
     const size_t id = (size_t) (uintptr_t) sqlite3_user_data(context);
-    sqlite3_result_text(context, gps[id].gpath, -1, SQLITE_TRANSIENT);
+
+    /* get path found in summary */
+    const unsigned char *summary = sqlite3_value_text(argv[0]);
+
+    /* find first slash */
+    const unsigned char *s = summary;
+    while (*s && (*s != '/')) {
+        s++;
+    }
+
+    /* join path segments, removing duplicate at join point */
+    char final_path[MAXPATH];
+    SNPRINTF(final_path, MAXPATH, "%s%s", gps[id].gpath, s);
+
+    sqlite3_result_text(context, final_path, -1, SQLITE_TRANSIENT);
+
     return;
 }
 
