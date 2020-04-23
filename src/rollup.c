@@ -100,7 +100,7 @@ struct RollUpStats {
     struct sll not_rolled_up;
     struct sll rolled_up;
 
-    size_t remaining;  /* subdirectories that remain after rolling up */
+    /* size_t remaining;  /\* subdirectories that remain after rolling up *\/ */
 
     #ifdef DEBUG
     struct OutputBuffers * print_buffers;
@@ -194,13 +194,13 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     struct sll rolled_up;
     sll_init(&rolled_up);
 
-    size_t remaining = 0;
+    /* size_t remaining = 0; */
 
     for(size_t i = 0; i < threads; i++) {
         sll_move_append(&not_processed, &stats[i].not_processed);
         sll_move_append(&not_rolled_up, &stats[i].not_rolled_up);
         sll_move_append(&rolled_up,     &stats[i].rolled_up);
-        remaining += stats[i].remaining;
+        /* remaining += stats[i].remaining; */
     }
 
     /* print stats of each type of directory */
@@ -237,12 +237,13 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     rollup_distribution("Successful", successful);
     rollup_distribution("Failed",     failed);
 
-    fprintf(stderr, "Drectories that need to be opened: %zu\n", remaining);
-    fprintf(stderr, "Total: %zu (%zu empty)\n",
-            sll_get_size(&not_processed) +
-            sll_get_size(&not_rolled_up) +
-            sll_get_size(&rolled_up),
-            empty);
+    const size_t total = sll_get_size(&not_processed) +
+                         sll_get_size(&not_rolled_up) +
+                         sll_get_size(&rolled_up);
+
+
+    /* fprintf(stderr, "Drectories that need to be opened: %zu\n", remaining); */
+    fprintf(stderr, "Total: %zu (%zu empty)\n", total, empty);
 
     sll_destroy(&rolled_up, 1);
     sll_destroy(&not_rolled_up, 1);
@@ -496,8 +497,7 @@ int get_nondirs(struct RollUp * rollup, struct DirStats * ds, sqlite3 * dst time
 */
 int do_rollup(struct RollUp * rollup,
               struct DirStats * ds,
-              sqlite3 *dst,
-              const int dry_run
+              sqlite3 * dst
               timestamp_sig) {
     /* assume that this directory can be rolled up */
     /* can_rollup should have been called earlier  */
@@ -513,20 +513,18 @@ int do_rollup(struct RollUp * rollup,
     char * err = NULL;
     int exec_rc = SQLITE_OK;
 
-    if (!dry_run) {
-        /* set the rollup score in the SQL statement */
-        char rollup_current_dir[] = ROLLUP_CURRENT_DIR;
-        rollup_current_dir[rollup_score_offset] += ds->score;
+    /* set the rollup score in the SQL statement */
+    char rollup_current_dir[] = ROLLUP_CURRENT_DIR;
+    rollup_current_dir[rollup_score_offset] += ds->score;
 
-        timestamp_start(rollup_current_dir);
-        exec_rc = sqlite3_exec(dst, rollup_current_dir, NULL, NULL, &err);
-        timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_current_dir", rollup_current_dir);
+    timestamp_start(rollup_current_dir);
+    exec_rc = sqlite3_exec(dst, rollup_current_dir, NULL, NULL, &err);
+    timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_current_dir", rollup_current_dir);
 
-        if (exec_rc != SQLITE_OK) {
-            fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
-            rc = -1;
-            goto end_rollup;
-        }
+    if (exec_rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to copy \"%s\" entries into pentries table: %s\n", rollup->data.name, err);
+        rc = -1;
+        goto end_rollup;
     }
 
     /* if any subdir fails to roll up, record it */
@@ -550,26 +548,12 @@ int do_rollup(struct RollUp * rollup,
 
         /* roll up the subdir into this dir */
         if (!child_failed) {
-            /* /\* get number of non-dirs in this subdirectory *\/ */
-            /* timestamp_start(rollup_nondir_count); */
-            /* exec_rc = sqlite3_exec(dst, "SELECT COUNT(*) FROM " SUBDIR_ATTACH_NAME ".pentries", add_entries_count, &ds->subnondir_count, &err); */
-            /* timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_nondir_count", rollup_nondir_count); */
-
-            /* if (exec_rc != SQLITE_OK) { */
-            /*     fprintf(stderr, "Warning: Failed to get pentries row count from \"%s\": %s\n", child->name, err); */
-            /*     sqlite3_free(err); */
-            /*     err = NULL; */
-            /* } */
-
-            if (!dry_run) {
-                /* roll up */
-                timestamp_start(rollup_subdir);
-                exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
-                timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdir", rollup_subdir);
-                if (exec_rc != SQLITE_OK) {
-                    fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
-                    child_failed = 1;
-                }
+            timestamp_start(rollup_subdir);
+            exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
+            timestamp_end(timestamp_buffers, rollup->tid.up, ts_buf, "rollup_subdir", rollup_subdir);
+            if (exec_rc != SQLITE_OK) {
+                fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
+                child_failed = 1;
             }
         }
 
@@ -638,13 +622,13 @@ void rollup(void * args timestamp_sig) {
         );
     timestamp_end(timestamp_buffers, id, ts_buf, "opendb", open_curr_db);
 
-    /* get count of number of non-directories that will be affected */
-    timestamp_start(nondir_count);
-    get_nondirs(dir, ds, dst timestamp_args);
-    timestamp_end(timestamp_buffers, id, ts_buf, "nondir_count", nondir_count);
-
     /* can attempt to roll up */
     if (dst) {
+        /* get count of number of non-directories that will be affected */
+        timestamp_start(nondir_count);
+        get_nondirs(dir, ds, dst timestamp_args);
+        timestamp_end(timestamp_buffers, id, ts_buf, "nondir_count", nondir_count);
+
         /* check if rollup is allowed */
         ds->score = can_rollup(dir, dst timestamp_args);
 
@@ -678,24 +662,21 @@ void rollup(void * args timestamp_sig) {
         /* if can roll up */
         if (ds->score > 0) {
             /* keep track of all successful and failed rollups in rolled_up */
-            ds->success = (do_rollup(dir, ds, dst, in.dry_run timestamp_args) == 0);
+            ds->success = ((in.dry_run?0:do_rollup(dir, ds, dst timestamp_args)) == 0);
             sll_push(&stats[id].rolled_up, ds);
         }
-        else {
+        else if (ds->score == 0) {
             /* is not allowed to roll up */
-
             sll_push(&stats[id].not_rolled_up, ds);
+
+            /* /\* all subdirs are the top of their subtrees *\/ */
+            /* stats[id].remaining += ds->subdir_count; */
         }
 
-        /* if roll up failed, then all subdirs are the top of their subtrees */
-        if (ds->score == 0) {
-            stats[id].remaining += sll_get_size(&dir->data.subdirs);
-        }
-
-        /* if roll up succeeded at the root directory, count it as a remaining directory */
-        if (!dir->data.parent && (ds->score > 0)) {
-            stats[id].remaining++;
-        }
+        /* /\* if roll up succeeded at the root directory, count it as a remaining directory *\/ */
+        /* if (!dir->data.parent && (ds->score > 0)) { */
+        /*     stats[id].remaining++; */
+        /* } */
     }
     else {
         /* did not check if can roll up */
@@ -728,7 +709,7 @@ int main(int argc, char * argv[]) {
         sll_init(&stats[i].not_processed);
         sll_init(&stats[i].not_rolled_up);
         sll_init(&stats[i].rolled_up);
-        stats[i].remaining = 0;
+        /* stats[i].remaining = 0; */
     }
 
     #ifdef DEBUG
