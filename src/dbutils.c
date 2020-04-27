@@ -956,7 +956,7 @@ static void starting_point(sqlite3_context *context, int argc, sqlite3_value **a
 }
 
 int addqueryfuncs(sqlite3 *db, size_t id, size_t lvl, char * starting_dir) {
-    return ((sqlite3_create_function(db, "path",                0, SQLITE_UTF8, (void *) (uintptr_t) id,  &path,                NULL, NULL) == SQLITE_OK) &&
+    return ((sqlite3_create_function(db, "path",                1, SQLITE_UTF8, (void *) (uintptr_t) id,  &path,                NULL, NULL) == SQLITE_OK) &&
             (sqlite3_create_function(db, "fpath",               0, SQLITE_UTF8, (void *) (uintptr_t) id,  &fpath,               NULL, NULL) == SQLITE_OK) &&
             (sqlite3_create_function(db, "epath",               0, SQLITE_UTF8, (void *) (uintptr_t) id,  &epath,               NULL, NULL) == SQLITE_OK) &&
             (sqlite3_create_function(db, "uidtouser",           2, SQLITE_UTF8, NULL,                     &uidtouser,           NULL, NULL) == SQLITE_OK) &&
