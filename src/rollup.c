@@ -219,31 +219,45 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     /* count empty directories */
 
     /* do not count not_processed, since they do not have databases to scan */
+    size_t not_processed_nondirs = 0;
     size_t not_processed_empty = 0;
 
+    size_t not_rolled_up_nondirs = 0;
     size_t not_rolled_up_empty = 0;
     sll_loop(&not_rolled_up, node) {
         struct DirStats * ds = (struct DirStats *) sll_node_data(node);
+        not_rolled_up_nondirs += ds->subnondir_count;
         not_rolled_up_empty += !ds->subnondir_count;
     }
+
+    size_t rolled_up_nondirs = 0;
     size_t rolled_up_empty = 0;
     sll_loop(&rolled_up, node) {
         struct DirStats * ds = (struct DirStats *) sll_node_data(node);
+        rolled_up_nondirs += ds->subnondir_count;
         rolled_up_empty += !ds->subnondir_count;
     }
-
-    const size_t empty = not_processed_empty + not_rolled_up_empty + rolled_up_empty;
 
     rollup_distribution("Successful", successful);
     rollup_distribution("Failed",     failed);
 
-    const size_t total = sll_get_size(&not_processed) +
-                         sll_get_size(&not_rolled_up) +
-                         sll_get_size(&rolled_up);
+    const size_t total_nondirs = not_processed_nondirs +
+                                 not_rolled_up_nondirs +
+                                 rolled_up_nondirs;
+
+    const size_t empty = not_processed_empty +
+                         not_rolled_up_empty +
+                         rolled_up_empty;
+
+    const size_t total_dirs = sll_get_size(&not_processed) +
+                              sll_get_size(&not_rolled_up) +
+                              sll_get_size(&rolled_up);
 
 
     /* fprintf(stderr, "Drectories that need to be opened: %zu\n", remaining); */
-    fprintf(stderr, "Total: %zu (%zu empty)\n", total, empty);
+    fprintf(stderr, "Files/Links: %zu\n", total_nondirs);
+    fprintf(stderr, "Directories: %zu (%zu empty)\n", total_dirs, empty);
+    fprintf(stderr, "Total:       %zu\n", total_nondirs + total_dirs);
 
     sll_destroy(&rolled_up, free);
     sll_destroy(&not_rolled_up, free);
