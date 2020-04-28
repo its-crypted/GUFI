@@ -263,8 +263,8 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     sll_destroy(&not_processed, 1);
 }
 
+#ifdef DEBUG
 static inline void print_result(struct OutputBuffers * obufs, const size_t id, const char * name, const int score, const size_t success) {
-    #ifdef DEBUG
     #ifdef PRINT_ROLLUP_SCORE
     char result[] = " 0 0\n";
     const size_t result_len = strlen(results);
@@ -299,8 +299,8 @@ static inline void print_result(struct OutputBuffers * obufs, const size_t id, c
 
     obuf->filled += len;
     #endif
-    #endif
 }
+#endif
 
 /* main data being passed around during walk */
 struct RollUp {
@@ -718,7 +718,10 @@ void rollup(void * args timestamp_sig) {
             }
         }
 
-        print_result(stats->print_buffers, id, dir->data.name, ds->score, ds->success);
+        #ifdef DEBUG
+        print_result(stats->print_buffers, id,
+                     dir->data.name, ds->score, ds->success);
+        #endif
     }
     else {
         /* did not check if can roll up */
