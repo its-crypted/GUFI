@@ -137,9 +137,8 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
 
     /* no subdirectories still need processing, so can attempt to roll up */
 
-    #ifdef DEBUG
+    /* keep track of which thread was used to go back up */
     bu->tid.up = id;
-    #endif
 
     /* call user function */
     timestamp_start(run_user_func);
@@ -175,18 +174,13 @@ int ascend_to_top(struct QPTPool * ctx, const size_t id, void * data, void * arg
 }
 
 static struct BottomUp * track(const char * name, const size_t name_len,
-                               const size_t user_struct_size, struct sll * sll
-                               #ifdef DEBUG
-                               , const size_t level
-                               #endif
-) {
+                               const size_t user_struct_size, struct sll * sll,
+                               const size_t level) {
     struct BottomUp * copy = malloc(user_struct_size);
 
     memcpy(copy->name, name, name_len + 1);
 
-    #ifdef DEBUG
     copy->level = level;
-    #endif
 
     /* store the subdirectories without enqueuing them */
     sll_push(sll, copy);
@@ -201,9 +195,8 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
     struct UserArgs * ua = (struct UserArgs *) args;
     struct BottomUp * bu = (struct BottomUp *) data;
 
-    #ifdef DEBUG
+    /* keep track of which thread was used to walk downwards */
     bu->tid.down = id;
-    #endif
 
     timestamp_start(open_dir);
     DIR * dir = opendir(bu->name);
@@ -225,9 +218,7 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
     timestamp_end(ua->timestamp_buffers, id, ts_buf, "init", init);
 
     timestamp_start(read_dir_loop);
-    #ifdef DEBUG
     const size_t next_level = bu->level + 1;
-    #endif
     while (1) {
         timestamp_start(read_dir);
         struct dirent * entry = readdir(dir);;
@@ -257,22 +248,18 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
 
         timestamp_start(track_entry);
         if (S_ISDIR(st.st_mode)) {
-            track(new_work.name, name_len, ua->user_struct_size, &bu->subdirs
-                  #ifdef DEBUG
-                  , next_level
-                  #endif
-                );
+            track(new_work.name, name_len,
+                  ua->user_struct_size, &bu->subdirs,
+                  next_level);
 
             /* count how many subdirectories this directory has */
             bu->subdir_count++;
         }
         else {
             if (ua->track_non_dirs) {
-                track(new_work.name, name_len, ua->user_struct_size, &bu->subnondirs
-                      #ifdef DEBUG
-                      , next_level
-                      #endif
-                );
+                track(new_work.name, name_len,
+                      ua->user_struct_size, &bu->subnondirs,
+                      next_level);
             }
             bu->subnondir_count++;
         }
@@ -379,10 +366,7 @@ int parallel_bottomup(char ** root_names, size_t root_count,
 
         root->parent = NULL;
         root->extra_args = extra_args;
-
-        #ifdef DEBUG
         root->level = 0;
-        #endif
 
         timestamp_start(enqueue_root);
         QPTPool_enqueue(pool, i % in.maxthreads, descend_to_bottom, root);

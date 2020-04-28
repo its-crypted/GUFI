@@ -654,9 +654,9 @@ void rollup(void * args timestamp_sig) {
     /* get statistics out of BottomUp */
     struct DirStats * ds = malloc(sizeof(struct DirStats));
     SNFORMAT_S(ds->path, MAXPATH, 1, dir->data.name, name_len);
+    ds->level = dir->data.level;
     ds->subdir_count = dir->data.subdir_count;
     ds->subnondir_count = 0;
-    ds->level = dir->data.level;
     ds->score = 0;
     ds->success = 1;
 
