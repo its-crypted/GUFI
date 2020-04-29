@@ -72,6 +72,7 @@ zypper --non-interactive remove kernel-debug* libapparmor* libgmodule* libX11* l
 # add the tumbleweed oss repo
 zypper ar -f -c http://download.opensuse.org/tumbleweed/repo/oss tumbleweed-oss
 rm -rf /etc/ssl/certs
+mkdir /run/systemd
 zypper --non-interactive --no-gpg-checks update
 
 # install libraries
