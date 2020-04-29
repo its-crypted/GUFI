@@ -79,8 +79,8 @@ OF SUCH DAMAGE.
 
 /* extra AscendFunc_t argments */
 #if defined(DEBUG) && defined(PER_THREAD_STATS)
-    #define timestamp_sig  struct OutputBuffers * timestamp_buffers
-    #define timestamp_args timestamp_buffers
+    #define timestamp_sig  , struct OutputBuffers * timestamp_buffers
+    #define timestamp_args , timestamp_buffers
 #else
     #define timestamp_sig
     #define timestamp_args
