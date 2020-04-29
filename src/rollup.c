@@ -351,7 +351,7 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
         struct RollUp * child = (struct RollUp *) sll_node_data(node);
 
         char dbname[MAXPATH];
-        SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, child->data.name);
+        SNFORMAT_S(dbname, MAXPATH, 3, child->data.name, strlen(child->data.name), "/", 1, DBNAME, DBNAME_LEN);
 
         timestamp_start(open_child_db);
         sqlite3 * db = opendb(dbname, SQLITE_OPEN_READONLY, 1, 0
@@ -591,7 +591,7 @@ int do_rollup(struct RollUp * rollup,
         struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
 
         char child_db_name[MAXPATH];
-        SNPRINTF(child_db_name, MAXPATH, "%s/" DBNAME, child->name);
+        SNFORMAT_S(child_db_name, MAXPATH, 3, child->name, strlen(child->name), "/", 1, DBNAME, DBNAME_LEN);
 
         size_t child_failed = 0;
 
