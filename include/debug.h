@@ -81,11 +81,23 @@ struct start_end {
     struct timespec end;
 };
 
-#define timestamp_set_start_impl(name)              \
+#define timestamp_create_raw(name)                                      \
+    struct start_end name;
+
+#define timestamp_create_zero_raw(name, zero)                           \
+    timestamp_create_raw(name);                                         \
+    memcpy(&name.start, zero, sizeof(struct timespec));                 \
+    memcpy(&name.end,   zero, sizeof(struct timespec))
+
+#define timestamp_set_start_raw(name)                                   \
     clock_gettime(CLOCK_MONOTONIC, &((name).start));
 
-#define timestamp_set_end_impl(name)                \
+#define timestamp_set_end_raw(name)                                     \
     clock_gettime(CLOCK_MONOTONIC, &((name).end));
+
+#define timestamp_print_raw(obs, id, str, name)                         \
+    print_timer(obs, id, ts_buf, sizeof(ts_buf), str, &name)
+
 
 /* nanoseconds since an unspecified epoch */
 uint64_t since_epoch(struct timespec * ts);
@@ -96,7 +108,6 @@ long double elapsed(struct start_end * se);
 int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const size_t size, const char * name, struct start_end * se);
 
 #ifdef DEBUG
-
 #define timestamp_init(obs, count, capacity)                            \
     struct OutputBuffers obs##_stack;                                   \
     struct OutputBuffers * obs = &obs##_stack;                          \
@@ -105,37 +116,41 @@ int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const
         return -1;                                                      \
     }
 
-#define timestamp_get_name(name)                            \
+#define timestamp_get_name(name)                                        \
     name##_ts
 
-#define timestamp_create(name)                              \
-    struct start_end timestamp_get_name(name)
+#define timestamp_set_start(name)                                       \
+    timestamp_set_start_raw(timestamp_get_name(name))
 
-#define timestamp_set_start(name)                           \
-    timestamp_set_start_impl(timestamp_get_name(name))
+#define timestamp_set_end(name)                                         \
+    timestamp_set_end_raw(timestamp_get_name(name))
 
-#define timestamp_start(name)                               \
-    timestamp_create(name);                                 \
+#define timestamp_create(name)                                          \
+    timestamp_create_raw(timestamp_get_name(name))
+
+#define timestamp_create_zero(name, zero)                               \
+    timestamp_create_zero_raw(timestamp_get_name(name))
+
+#define timestamp_start(name)                                           \
+    timestamp_create(name);                                             \
     timestamp_set_start(name)
-
-#define timestamp_set_end(name)                             \
-    timestamp_set_end_impl(timestamp_get_name(name))
 
 /* only print if PER_THREAD_STATS is defined */
 #ifdef PER_THREAD_STATS
+/* ts_buf must be created in an accessible scope before printing */
 #define timestamp_create_buffer(size) char ts_buf[size]
 
-#define timestamp_print(obs, id, buf, str, name)            \
-    print_timer(obs, id, buf, sizeof(buf),                  \
+#define timestamp_print(obs, id, str, name)                 \
+    print_timer(obs, id, ts_buf, sizeof(ts_buf),            \
                 str, &timestamp_get_name(name))
 
-#define timestamp_end(obs, id, buf, str, name)              \
+#define timestamp_end(obs, id, str, name)                   \
     timestamp_set_end(name);                                \
-    timestamp_print(obs, id, buf, str, name)
+    timestamp_print(obs, id, str, name)
 #else
 #define timestamp_create_buffer(size)
-#define timestamp_print(obs, id, buf, str, name)
-#define timestamp_end(obs, id, buf, str, name)
+#define timestamp_print(obs, id, str, name)
+#define timestamp_end(obs, id, str, name)
 #endif
 
 #define timestamp_elapsed(name)                             \
@@ -149,13 +164,14 @@ int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const
 
 #define timestamp_init(obs, count, capacity)
 #define timestamp_get_name(name)
-#define timestamp_create(name)
 #define timestamp_set_start(name)
 #define timestamp_start(name)
 #define timestamp_set_end(name)
+#define timestamp_create(name)
+#define timestamp_create_zero(name, zero)
 #define timestamp_create_buffer(size)
-#define timestamp_print(obs, id, buf, str, name)
-#define timestamp_end(obs, id, buf, str, name)
+#define timestamp_print(obs, id, str, name)
+#define timestamp_end(obs, id, str, name)
 #define timestamp_elapsed(name)
 #define timestamp_destroy(obs, count)
 

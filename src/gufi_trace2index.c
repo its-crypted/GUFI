@@ -324,9 +324,9 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
                 #ifdef DEBUG
                 timestamp_start(print_timestamps);
-                timestamp_print(ctx->buffers, id, ts_buf, "startdb",          startdb_call);
-                timestamp_print(ctx->buffers, id, ts_buf, "stopdb",           stopdb_call);
-                timestamp_end(ctx->buffers,   id, ts_buf, "print_timestamps", print_timestamps);
+                timestamp_print(ctx->buffers, id, "startdb",          startdb_call);
+                timestamp_print(ctx->buffers, id, "stopdb",           stopdb_call);
+                timestamp_end(ctx->buffers,   id, "print_timestamps", print_timestamps);
 
                 #ifdef CUMULATIVE_TIMES
                 thread_startdb += timestamp_elapsed(startdb_call);
@@ -340,12 +340,12 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
             #ifdef DEBUG
             timestamp_start(print_timestamps);
-            timestamp_print(ctx->buffers, id, ts_buf, "getline",          getline_call);
-            timestamp_print(ctx->buffers, id, ts_buf, "memset_row",       memset_row);
-            timestamp_print(ctx->buffers, id, ts_buf, "entry_linetowork", entry_linetowork);
-            timestamp_print(ctx->buffers, id, ts_buf, "free",             free_call);
-            timestamp_print(ctx->buffers, id, ts_buf, "sumit",            sumit_call);
-            timestamp_print(ctx->buffers, id, ts_buf, "insertdbgo",       insertdbgo_call);
+            timestamp_print(ctx->buffers, id, "getline",          getline_call);
+            timestamp_print(ctx->buffers, id, "memset_row",       memset_row);
+            timestamp_print(ctx->buffers, id, "entry_linetowork", entry_linetowork);
+            timestamp_print(ctx->buffers, id, "free",             free_call);
+            timestamp_print(ctx->buffers, id, "sumit",            sumit_call);
+            timestamp_print(ctx->buffers, id, "insertdbgo",       insertdbgo_call);
             timestamp_set_end(print_timestamps);
 
             #ifdef CUMULATIVE_TIMES
@@ -357,7 +357,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
             thread_insertdbgo       += timestamp_elapsed(insertdbgo_call);
             #endif
 
-            timestamp_print(ctx->buffers, id, ts_buf, "print_timestamps", print_timestamps);
+            timestamp_print(ctx->buffers, id, "print_timestamps", print_timestamps);
             #endif
         }
 
@@ -381,16 +381,16 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
         #ifdef DEBUG
         timestamp_start(print_timestamps);
-        timestamp_print(ctx->buffers, id, ts_buf, "zero_summary", zero_summary);
-        timestamp_print(ctx->buffers, id, ts_buf, "insertdbprep", insertdbprep_call);
-        timestamp_print(ctx->buffers, id, ts_buf, "startdb",      startdb_call);
-        timestamp_print(ctx->buffers, id, ts_buf, "fseek",        fseek_call);
-        timestamp_print(ctx->buffers, id, ts_buf, "read_entries", read_entries);
-        timestamp_print(ctx->buffers, id, ts_buf, "read_entries", read_entries);
-        timestamp_print(ctx->buffers, id, ts_buf, "stopdb",       stopdb_call);
-        timestamp_print(ctx->buffers, id, ts_buf, "insertdbfin",  insertdbfin_call);
-        timestamp_print(ctx->buffers, id, ts_buf, "insertsumdb",  insertsumdb_call);
-        timestamp_print(ctx->buffers, id, ts_buf, "closedb",      closedb_call);
+        timestamp_print(ctx->buffers, id, "zero_summary", zero_summary);
+        timestamp_print(ctx->buffers, id, "insertdbprep", insertdbprep_call);
+        timestamp_print(ctx->buffers, id, "startdb",      startdb_call);
+        timestamp_print(ctx->buffers, id, "fseek",        fseek_call);
+        timestamp_print(ctx->buffers, id, "read_entries", read_entries);
+        timestamp_print(ctx->buffers, id, "read_entries", read_entries);
+        timestamp_print(ctx->buffers, id, "stopdb",       stopdb_call);
+        timestamp_print(ctx->buffers, id, "insertdbfin",  insertdbfin_call);
+        timestamp_print(ctx->buffers, id, "insertsumdb",  insertsumdb_call);
+        timestamp_print(ctx->buffers, id, "closedb",      closedb_call);
         timestamp_set_end(print_timestamps);
 
         #ifdef CUMULATIVE_TIMES
@@ -406,7 +406,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         thread_files        += row_count;
         #endif
 
-        timestamp_print(ctx->buffers, id, ts_buf, "print_timestamps", print_timestamps);
+        timestamp_print(ctx->buffers, id, "print_timestamps", print_timestamps);
         #endif
     }
 
@@ -416,13 +416,13 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
     #ifdef DEBUG
     timestamp_start(print_timestamps);
-    timestamp_print(ctx->buffers, id, ts_buf, "handle_args",      handle_args);
-    timestamp_print(ctx->buffers, id, ts_buf, "memset_work",      memset_work);
-    timestamp_print(ctx->buffers, id, ts_buf, "dir_linetowork",   dir_linetowork);
-    timestamp_print(ctx->buffers, id, ts_buf, "dupdir",           dupdir_call);
-    timestamp_print(ctx->buffers, id, ts_buf, "copy_template",    copy_template_call);
-    timestamp_print(ctx->buffers, id, ts_buf, "opendb",           opendb_call);
-    timestamp_print(ctx->buffers, id, ts_buf, "row_destroy",      row_destroy_call);
+    timestamp_print(ctx->buffers, id, "handle_args",      handle_args);
+    timestamp_print(ctx->buffers, id, "memset_work",      memset_work);
+    timestamp_print(ctx->buffers, id, "dir_linetowork",   dir_linetowork);
+    timestamp_print(ctx->buffers, id, "dupdir",           dupdir_call);
+    timestamp_print(ctx->buffers, id, "copy_template",    copy_template_call);
+    timestamp_print(ctx->buffers, id, "opendb",           opendb_call);
+    timestamp_print(ctx->buffers, id, "row_destroy",      row_destroy_call);
     timestamp_set_end(print_timestamps);
     #ifdef CUMULATIVE_TIMES
     thread_handle_args     += timestamp_elapsed(handle_args);
@@ -459,7 +459,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     total_files            += thread_files;
     pthread_mutex_unlock(&print_mutex);
     #endif
-    timestamp_print(ctx->buffers, id, ts_buf, "print_timestamps", print_timestamps);
+    timestamp_print(ctx->buffers, id, "print_timestamps", print_timestamps);
     #endif
 
     return !db;

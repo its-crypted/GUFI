@@ -210,12 +210,12 @@ int set_db_pragmas(sqlite3 * db) {
 #if defined(DEBUG) && defined(PER_THREAD_STATS)
 #define check_set_start(name)            \
     if (name) {                          \
-        timestamp_set_start_impl(*name);  \
+        timestamp_set_start_raw(*name);  \
     }
 
 #define check_set_end(name)              \
     if (name) {                          \
-        timestamp_set_end_impl(*name);    \
+        timestamp_set_end_raw(*name);    \
     }
 #else
 #define check_set_start(name)
