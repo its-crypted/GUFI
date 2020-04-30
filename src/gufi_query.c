@@ -777,7 +777,8 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         timestamp_print     (ctx->buffers,     id, "free_work",          free_work);
     }
 
-    timestamp_end               (ctx->buffers, id, "output_timestamps",  output_timestamps);
+    timestamp_set_end(output_timestamps);
+    timestamp_print             (ctx->buffers, id, "output_timestamps",  output_timestamps);
 
     #ifdef CUMULATIVE_TIMES
     pthread_mutex_lock(&print_mutex);
