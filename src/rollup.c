@@ -153,7 +153,7 @@ do {                                                                    \
     const size_t half = count / 2;                                      \
     double median = array[half];                                        \
     if (count % 2 == 0) {                                               \
-        median += array[half + 1];                                      \
+        median += array[half - 1];                                      \
         median /= 2;                                                    \
     }                                                                   \
                                                                         \
@@ -400,8 +400,8 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
     size_t u = 0;
     for(size_t i = 0; i < child_count; i++) {
         /* self and subdirectories are all o+rx */
-        o_plus_rx += ((curr->mode & 0005) &&
-                      (child_perms[i].mode & 0005) &&
+        o_plus_rx += (((curr->mode          & 0005) == 0005) &&
+                      ((child_perms[i].mode & 0005) == 0005) &&
                       (curr->uid == child_perms[i].uid) &&
                       (curr->gid == child_perms[i].gid));
 
@@ -411,32 +411,32 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
                 (curr->gid == child_perms[i].gid));
 
         /* self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx */
-        ug += (((curr->mode & 0550) == (child_perms[i].mode & 0550)) &&
+        ug += (((curr->mode & 0550) == 0550) &&
+               ((curr->mode & 0550) == (child_perms[i].mode & 0550)) &&
                 (curr->uid == child_perms[i].uid) &&
                 (curr->gid == child_perms[i].gid));
 
         /* self and subdirectories have same user permissions, go-rx, uid */
-        u += (((curr->mode & 0500) == (child_perms[i].mode & 0500)) &&
-              !(child_perms[i].mode & 0055) &&
+        u += (((curr->mode & 0500) == 0500) &&
+              ((curr->mode & 0500) == (child_perms[i].mode & 0500)) &&
               (curr->uid == child_perms[i].uid));
-
     }
 
     free(child_perms);
 
-    if (o_plus_rx == idx) {
+    if (o_plus_rx == child_count) {
       return 1;
     }
 
-    if (ugo == idx) {
+    if (ugo == child_count) {
       return 4;
     }
 
-    if (ug == idx) {
+    if (ug == child_count) {
       return 2;
     }
 
-    if (u == idx) {
+    if (u == child_count) {
       return 3;
     }
 

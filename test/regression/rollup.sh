@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # This file is part of GUFI, which is part of MarFS, which is released
 # under the BSD license.
 #
@@ -60,74 +61,67 @@
 
 
 
-cmake_minimum_required(VERSION 3.0.0)
+set -e
 
-# regression test specific files
-set(CORE
-  generatetree
-  setup.sh
-  common.py
-)
+ROOT="$(realpath ${BASH_SOURCE[0]})"
+ROOT="$(dirname ${ROOT})"
+ROOT="$(dirname ${ROOT})"
+ROOT="$(dirname ${ROOT})"
 
-# .sh and .expected
-set(CONTRIB)
-if (CMAKE_CXX_COMPILER)
-  list(APPEND CONTRIB
-    verifytrace
-    verifytraceintree
-  )
-endif()
+GUFI_DIR2INDEX="${ROOT}/src/gufi_dir2index"
+ROLLUP="${ROOT}/src/rollup"
 
-# .sh, .py, and .expected
-set(SCRIPTS
-  gufi_find
-  gufi_ls
-  gufi_stats
-)
+TMP="tmp"
+SRC="prefix"
+INDEXROOT="${SRC}.gufi"
+OUTPUT="rollup.out"
 
-# .sh and .expected
-set(SRC
-  gufi_dir2index
-  gufi_dir2trace
-  gufi_trace2index
-  gufi_query
-  querydb
-  querydbn
-)
+function cleanup() {
+    rm -rf ${TMP} ${SRC} ${INDEXROOT}
+}
 
-if (NOT APPLE)
-  list(APPEND SRC
-    gufi_stat)
-endif()
+trap cleanup EXIT
 
-# .sh and .expected
-# tests are not added since sudo is required
-set(SUDO
-  rollup
-)
+cleanup
 
-foreach(NAME ${CORE})
-  configure_file(${NAME} ${NAME} COPYONLY)
-endforeach()
+(
+# not rolled up:
+#     1: ${TMP}
+# rolled up:
+#     16: (3 subdirs * [o+rx, ugo, ug, u]) + [o+rx, ugo, ug, u]
+mkdir ${TMP}                    # 0
+mkdir -m 005 ${TMP}/o+rx        #  1
+mkdir -m 007 ${TMP}/o+rx/dir1   #   1
+mkdir -m 005 ${TMP}/o+rx/dir2   #   1
+mkdir -m 007 ${TMP}/o+rx/dir3   #   1
+mkdir -m 776 ${TMP}/ugo         #  4
+mkdir -m 776 ${TMP}/ugo/dir1    #   1
+mkdir -m 776 ${TMP}/ugo/dir2    #   1
+mkdir -m 776 ${TMP}/ugo/dir3    #   1
+mkdir -m 770 ${TMP}/ug          #  2
+mkdir -m 770 ${TMP}/ug/dir1     #   1
+mkdir -m 773 ${TMP}/ug/dir2     #   1
+mkdir -m 770 ${TMP}/ug/dir3     #   1
+mkdir -m 700 ${TMP}/u           #  3
+mkdir -m 700 ${TMP}/u/dir1      #   1
+mkdir -m 703 ${TMP}/u/dir2      #   1
+mkdir -m 700 ${TMP}/u/dir3      #   1
 
-foreach(NAME ${CONTRIB} ${SRC})
-  configure_file("${NAME}.sh"       "${NAME}.sh"       COPYONLY)
-  configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
+# copy ${TMP} 3 times to different users
+# 4 not rolled up: (3 * ${TMP}) + ${SRC}
+# 48 rolled up: (3 * ${TMP}/**)
+mkdir ${SRC}
+cp -R ${TMP} ${SRC}/1001
+chown -R 1001:1001 ${SRC}/1001
+cp -R ${TMP} ${SRC}/1002
+chown -R 1002:1002 ${SRC}/1002
+cp -R ${TMP} ${SRC}/1003
+chown -R 1003:1003 ${SRC}/1003
+rm -r ${TMP}
 
-  add_test(NAME ${NAME} COMMAND "${NAME}.sh")
-  set_tests_properties(${NAME} PROPERTIES LABELS regression)
-endforeach()
+${GUFI_DIR2INDEX} ${SRC} ${INDEXROOT}
+${ROLLUP} -X ${INDEXROOT}
+) 2>&1 | head -n -1 | tee "${OUTPUT}"
 
-foreach(NAME ${SCRIPTS})
-  configure_file("${NAME}.sh"       "${NAME}.sh"       COPYONLY)
-  configure_file("${NAME}.py"       "${NAME}.py"       COPYONLY)
-  configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
-
-  add_test(NAME ${NAME} COMMAND "${NAME}.sh")
-  set_tests_properties(${NAME} PROPERTIES LABELS regression)
-endforeach()
-
-foreach(NAME ${SUDO})
-  configure_file("${NAME}.sh"       "${NAME}.sh"       COPYONLY)
-  configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
-endforeach()
+diff ${ROOT}/test/regression/rollup.expected "${OUTPUT}"
+rm "${OUTPUT}"
