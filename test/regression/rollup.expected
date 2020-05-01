@@ -32,10 +32,10 @@ Rolled Up:                  48
         average:          0.75
     Files/Links:
         min:                 0
-        max:                 0
-        median:           0.00
-        sum:                 0
-        average:          0.00
+        max:                 3
+        median:           1.50
+        sum:                72
+        average:          1.50
     Level:
         min:                 2
         max:                 3
@@ -55,7 +55,7 @@ Rolled Up:                  48
         3:                   0
         4:                   0
         Total:               0
-Files/Links:    0
-Directories:    52 (52 empty)
-Total:          52
+Files/Links:    72
+Directories:    52 (16 empty)
+Total:          124
 Remaining Dirs: 16 (30.77%)

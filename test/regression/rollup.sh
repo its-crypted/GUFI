@@ -89,27 +89,54 @@ cleanup
 #     1: ${TMP}
 # rolled up:
 #     16: (3 subdirs * [o+rx, ugo, ug, u]) + [o+rx, ugo, ug, u]
+# files:
+#     24: (6 files * [o+rx, ugo, ug, u])
 mkdir ${TMP}                    # 0
 mkdir -m 005 ${TMP}/o+rx        #  1
 mkdir -m 007 ${TMP}/o+rx/dir1   #   1
+touch ${TMP}/o+rx/dir1/file1
 mkdir -m 005 ${TMP}/o+rx/dir2   #   1
+touch ${TMP}/o+rx/dir2/file1
+touch ${TMP}/o+rx/dir2/file2
 mkdir -m 007 ${TMP}/o+rx/dir3   #   1
+touch ${TMP}/o+rx/dir3/file1
+touch ${TMP}/o+rx/dir3/file2
+touch ${TMP}/o+rx/dir3/file3
 mkdir -m 776 ${TMP}/ugo         #  4
 mkdir -m 776 ${TMP}/ugo/dir1    #   1
+touch ${TMP}/ugo/dir1/file1
 mkdir -m 776 ${TMP}/ugo/dir2    #   1
+touch ${TMP}/ugo/dir2/file1
+touch ${TMP}/ugo/dir2/file2
 mkdir -m 776 ${TMP}/ugo/dir3    #   1
+touch ${TMP}/ugo/dir3/file1
+touch ${TMP}/ugo/dir3/file2
+touch ${TMP}/ugo/dir3/file3
 mkdir -m 770 ${TMP}/ug          #  2
 mkdir -m 770 ${TMP}/ug/dir1     #   1
+touch ${TMP}/ug/dir1/file1
 mkdir -m 773 ${TMP}/ug/dir2     #   1
+touch ${TMP}/ug/dir2/file1
+touch ${TMP}/ug/dir2/file2
 mkdir -m 770 ${TMP}/ug/dir3     #   1
+touch ${TMP}/ug/dir3/file1
+touch ${TMP}/ug/dir3/file2
+touch ${TMP}/ug/dir3/file3
 mkdir -m 700 ${TMP}/u           #  3
 mkdir -m 700 ${TMP}/u/dir1      #   1
+touch ${TMP}/u/dir1/file1
 mkdir -m 703 ${TMP}/u/dir2      #   1
+touch ${TMP}/u/dir2/file1
+touch ${TMP}/u/dir2/file2
 mkdir -m 700 ${TMP}/u/dir3      #   1
+touch ${TMP}/u/dir3/file1
+touch ${TMP}/u/dir3/file2
+touch ${TMP}/u/dir3/file3
 
 # copy ${TMP} 3 times to different users
 # 4 not rolled up: (3 * ${TMP}) + ${SRC}
-# 48 rolled up: (3 * ${TMP}/**)
+# 48 rolled up: (3 * 16 dirs in ${TMP}
+# 72 files: 3 * 24 files in ${TMP}
 mkdir ${SRC}
 cp -R ${TMP} ${SRC}/1001
 chown -R 1001:1001 ${SRC}/1001
