@@ -1,0 +1,61 @@
+Ran 140 threads
+Roots:
+    prefix.gufi
+Not Processed:               0
+
+Not Rolled Up:               4
+    Subdirectories:
+        min:                 3
+        max:                 4
+        median:           4.00
+        sum:                15
+        average:          3.75
+    Files/Links:
+        min:                 0
+        max:                 0
+        median:           0.00
+        sum:                 0
+        average:          0.00
+    Level:
+        min:                 0
+        max:                 1
+        median:           1.00
+        sum:                 3
+        average:          0.75
+
+Rolled Up:                  48
+    Subdirectories:
+        min:                 0
+        max:                 3
+        median:           0.00
+        sum:                36
+        average:          0.75
+    Files/Links:
+        min:                 0
+        max:                 0
+        median:           0.00
+        sum:                 0
+        average:          0.00
+    Level:
+        min:                 2
+        max:                 3
+        median:           3.00
+        sum:               132
+        average:          2.75
+
+    Successful:
+        1:                  39
+        2:                   3
+        3:                   3
+        4:                   3
+        Total:              48
+    Failed:
+        1:                   0
+        2:                   0
+        3:                   0
+        4:                   0
+        Total:               0
+Files/Links:    0
+Directories:    52 (52 empty)
+Total:          52
+Remaining Dirs: 16 (30.77%)
