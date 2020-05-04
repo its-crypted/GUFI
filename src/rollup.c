@@ -694,12 +694,12 @@ void rollup(void * args timestamp_sig) {
             /* do the roll up */
             if (in.dry_run) {
                 ds->success = 1;
-                dir->rolledup = ds->score;
             }
             else {
                 ds->success = (do_rollup(dir, ds, dst timestamp_args) == 0);
             }
 
+            dir->rolledup = ds->success;
             sll_push(&stats[id].rolled_up, ds);
 
             /* root directory will always remain */
