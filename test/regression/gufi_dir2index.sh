@@ -104,7 +104,7 @@ OUTPUT="gufi_dir2index.out"
     src=$((echo "${src_dirs}"; echo "${src_nondirs}") | sort)
 
     index_dirs=$(find "${INDEXROOT}" -type d | sed "s/${INDEXROOT}/${SRCDIR}/g; s/[[:space:]]*$//g")
-    index_nondirs=$(${GUFI_QUERY} -d " " -E "SELECT path() || '/' || name FROM pentries" "${INDEXROOT}" | sed "s/${INDEXROOT}/${SRCDIR}/g; s/[[:space:]]*$//g")
+    index_nondirs=$(${GUFI_QUERY} -d " " -E "SELECT path(summary.name) || '/' || pentries.name FROM summary, pentries WHERE summary.inode == pentries.pinode" "${INDEXROOT}" | sed "s/${INDEXROOT}/${SRCDIR}/g; s/[[:space:]]*$//g")
     index=$((echo "${index_dirs}"; echo "${index_nondirs}") | sort)
 
     echo "Index Everything:"
@@ -131,7 +131,7 @@ do
         src=$((echo "${src_dirs}"; echo "${src_nondirs}") | sort)
 
         index_dirs=$(find "${INDEXROOT}" -type d | sed "s/${INDEXROOT}/${SRCDIR}/g; s/[[:space:]]*$//g")
-        index_nondirs=$(${GUFI_QUERY} -d " " -E "SELECT path() || '/' || name FROM pentries" "${INDEXROOT}" | sed "s/${INDEXROOT}/${SRCDIR}/g; s/[[:space:]]*$//g")
+        index_nondirs=$(${GUFI_QUERY} -d " " -E "SELECT path(summary.name) || '/' || pentries.name FROM summary, pentries WHERE summary.inode == pentries.pinode" "${INDEXROOT}" | sed "s/${INDEXROOT}/${SRCDIR}/g; s/[[:space:]]*$//g")
         index=$((echo "${index_dirs}"; echo "${index_nondirs}") | sort)
 
         echo "Index up to level ${level}:"
