@@ -263,42 +263,47 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     sll_destroy(&not_processed, free);
 }
 
-#ifdef DEBUG
-static inline void print_result(struct OutputBuffers * obufs, const size_t id, const char * name, const int score, const size_t success) {
-    #ifdef PRINT_ROLLUP_SCORE
-    char result[] = " 0 0\n";
-    const size_t result_len = strlen(results);
+/* print the result of a single roll up */
+/* name level score success */
+#if defined(DEBUG) && defined(PRINT_ROLLUP_SCORE)
+static inline
+void print_result(struct OutputBuffers * obufs, const size_t id,
+                  const char * name, const size_t level,
+                  const int score, const size_t success) {
+    char result[MAXSQL];
+    const size_t result_len = SNPRINTF(result, MAXSQL, " %zu 0 0\n", level);
 
     struct OutputBuffer * obuf = &(obufs->buffers[id]);
 
     const size_t name_len = strlen(name);
     const size_t len = name_len + result_len;
 
-    pthread_mutex_lock(&obufs->mutex);
     /* not enough space remaining, so clear out buffer */
     if ((obuf->capacity - obuf->filled) < len) {
+        pthread_mutex_lock(&obufs->mutex);
         fwrite(obuf->buf, sizeof(char), obuf->filled, stderr);
         obuf->filled = 0;
+        pthread_mutex_unlock(&obufs->mutex);
     }
 
     /* not enough space in entire buffer, so write directly */
     if (len >= obuf->capacity) {
+        pthread_mutex_lock(&obufs->mutex);
         fwrite(obuf->buf, sizeof(char), obuf->filled, stderr);
+        pthread_mutex_unlock(&obufs->mutex);
     }
-    pthread_mutex_unlock(&stats->print_buffers->mutex);
 
     /* print name */
     memcpy(obuf->buf + obuf->filled, name, name_len);
 
     /* set results string */
-    results[1] += results;
-    results[3] += success;
+    result[result_len - 4] += score;
+    result[result_len - 2] += success;
 
     /* print score and success */
-    memcpy(obuf->buf + obuf->filled + name_len, results, result_len);
+    memcpy(obuf->buf + obuf->filled + name_len, result, result_len);
 
     obuf->filled += len;
-    #endif
 }
 #endif
 
@@ -724,9 +729,10 @@ void rollup(void * args timestamp_sig) {
             }
         }
 
-        #ifdef DEBUG
+        #if defined(DEBUG) && defined(PRINT_ROLLUP_SCORE)
         print_result(stats->print_buffers, id,
-                     dir->data.name, ds->score, ds->success);
+                     dir->data.name, ds->level,
+                     ds->score, ds->success);
         #endif
     }
     else {

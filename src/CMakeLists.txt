@@ -86,6 +86,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   if (QPTPOOL_QUEUE_SIZE)
     add_definitions(-DQPTPOOL_QUEUE_SIZE=1)
   endif()
+
+  if (PRINT_ROLLUP_SCORE)
+    add_definitions(-DPRINT_ROLLUP_SCORE=1)
+  endif()
 endif()
 
 # remove opendb (implies NO_ADDQUERYFUNCS and NO_SQL_EXEC)
