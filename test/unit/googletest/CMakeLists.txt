@@ -76,9 +76,9 @@ if (CMAKE_CXX_COMPILER)
     trace.cpp
     utils.cpp
   )
-  add_executable(googletests ${TEST_SRC})
-  target_link_libraries(googletests -L${DEP_INSTALL_PREFIX}/googletest/lib -L${DEP_INSTALL_PREFIX}/googletest/lib64 gtest gtest_main ${COMMON_LIBRARIES})
+  add_executable(unit_tests ${TEST_SRC})
+  target_link_libraries(unit_tests -L${DEP_INSTALL_PREFIX}/googletest/lib -L${DEP_INSTALL_PREFIX}/googletest/lib64 gtest gtest_main ${COMMON_LIBRARIES})
 
-  add_test(NAME googletests COMMAND googletests)
-  set_tests_properties(googletests PROPERTIES LABELS unit)
+  add_test(NAME unit_tests COMMAND unit_tests)
+  set_tests_properties(unit_tests PROPERTIES LABELS unit)
 endif()
