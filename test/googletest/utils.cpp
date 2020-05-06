@@ -666,6 +666,9 @@ static char * another_modetostr(char * str, const mode_t mode) {
     if (mode & S_IFDIR) {
         str[0] = 'd';
     }
+    else if (mode & S_IFLNK) {
+        str[0] = 'l';
+    }
     str++;
 
     for(size_t i = 0; i < 9; i++) {
@@ -677,11 +680,31 @@ static char * another_modetostr(char * str, const mode_t mode) {
     return --str;
 }
 
+TEST(modetostr, error) {
+    // no output buffer
+    EXPECT_EQ(modetostr(nullptr, 1000, 0), nullptr);
+
+    // buffer is too small
+    for(size_t i = 0; i < 11; i++) {
+        char addr = 0;
+        EXPECT_EQ(modetostr(&addr, i, 0), nullptr);
+    }
+}
+
 TEST(modetostr, files) {
     char actual[11];
     char expected[11];
     for(mode_t i = 0; i < 01000; i++) {
-        EXPECT_STREQ(modetostr(actual, i), another_modetostr(expected, i));
+        EXPECT_STREQ(modetostr(actual, 11, i), another_modetostr(expected, i));
+    }
+}
+
+TEST(modetostr, links) {
+    char actual[11];
+    char expected[11];
+    for(mode_t i = 0; i < 01000; i++) {
+        const mode_t mode = i | S_IFLNK;
+        EXPECT_STREQ(modetostr(actual, 11, mode), another_modetostr(expected, mode));
     }
 }
 
@@ -690,6 +713,6 @@ TEST(modetostr, directories) {
     char expected[11];
     for(mode_t i = 0; i < 01000; i++) {
         const mode_t mode = i | S_IFDIR;
-        EXPECT_STREQ(modetostr(actual, mode), another_modetostr(expected, mode));
+        EXPECT_STREQ(modetostr(actual, 11, mode), another_modetostr(expected, mode));
     }
 }

@@ -844,11 +844,16 @@ size_t descend(struct QPTPool *ctx, const size_t id,
 }
 
 /* convert a mode to a human readable string */
-char * modetostr(char * str, const mode_t mode)
+char * modetostr(char * str, const size_t size, const mode_t mode)
 {
+    if (size < 11) {
+        return NULL;
+    }
+
     if (str) {
-        snprintf(str, 64, "----------");
+        SNPRINTF(str, size, "----------");
         if (mode &  S_IFDIR) str[0] = 'd';
+        if (mode &  S_IFLNK) str[0] = 'l';
         if (mode &  S_IRUSR) str[1] = 'r';
         if (mode &  S_IWUSR) str[2] = 'w';
         if (mode &  S_IXUSR) str[3] = 'x';

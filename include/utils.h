@@ -144,6 +144,6 @@ size_t descend(struct QPTPool * ctx, const size_t id,
                const size_t max_level);
 
 /* convert a mode to a human readable string */
-char * modetostr(char * str, const mode_t mode);
+char * modetostr(char * str, const size_t size, const mode_t mode);
 
 #endif
