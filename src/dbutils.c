@@ -855,7 +855,7 @@ static void modetotxt(sqlite3_context *context, int argc, sqlite3_value **argv)
     char tmode[64];
     if (argc == 1) {
         fmode = sqlite3_value_int(argv[0]);
-        modetostr(tmode, fmode);
+        modetostr(tmode, sizeof(tmode), fmode);
         sqlite3_result_text(context, tmode, -1, SQLITE_TRANSIENT);
         return;
     }
@@ -873,7 +873,7 @@ static void sqlite3_strftime(sqlite3_context *context, int argc, sqlite3_value *
     return;
 }
 
-static const char SIZE[] = {' ', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'};
+static const char SIZE[] = {'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'};
 
 /* Returns the number of blocks required to store a given size */
 /* Unfilled blocks count as one full block (round up)          */
@@ -882,18 +882,29 @@ static void blocksize(sqlite3_context *context, int argc, sqlite3_value **argv) 
     const char * unit  = (char *) sqlite3_value_text(argv[1]);
     const int    align = sqlite3_value_int(argv[2]);
 
-    size_t unit_size = 1;
-
     const size_t len = strlen(unit);
-    if (len) {
-        for(size_t i = 1; i < sizeof(SIZE); i++) {
-            if (len == 1)
-                unit_size *= 1024;
-            if ((len == 2) && (unit[1] == 'B'))
-                unit_size *= 1000;
-            if ((len == 3) && (unit[1] == 'i') && (unit[2] == 'B'))
-                unit_size *= 1024;
 
+    size_t unit_size = 1;
+    if (len) {
+        if ((len > 1) && (unit[len - 1] != 'B')) {
+            sqlite3_result_error(context, "Bad blocksize unit", 0);
+            return;
+        }
+
+        size_t multiplier = 1024;
+        if (len == 2) {
+            multiplier = 1000;
+        }
+
+        if (len == 3) {
+            if (unit[1] != 'i') {
+                sqlite3_result_error(context, "Bad blocksize unit", 0);
+                return;
+            }
+        }
+
+        for(size_t i = 0; i < sizeof(SIZE); i++) {
+            unit_size *= multiplier;
             if (unit[0] == SIZE[i]) {
                 break;
             }
@@ -920,7 +931,7 @@ static void human_readable_size(sqlite3_context *context, int argc, sqlite3_valu
     double size = sqlite3_value_double(argv[0]);
     if (size) {
         size_t unit_index = 0;
-        while (size > 1024) {
+        while (size >= 1024) {
             size /= 1024;
             unit_index++;
         }
@@ -930,8 +941,8 @@ static void human_readable_size(sqlite3_context *context, int argc, sqlite3_valu
             snprintf(buf, sizeof(buf), format, size);
         }
         else {
-            snprintf(format, sizeof(format), "%%%d.1f%%c", align - 1);
-            snprintf(buf, sizeof(buf), format, size, SIZE[unit_index]);
+            snprintf(format, sizeof(format), "%%%d.1f%%c", align);
+            snprintf(buf, sizeof(buf), format, size, SIZE[unit_index - 1]);
         }
     }
     else {

@@ -268,7 +268,7 @@ int print_callback(void * args, int count, char **data, char **columns) {
                 case 'A': /* access rights in human readable form */
                     {
                         char mode_str[11];
-                        modetostr(mode_str, mode);
+                        modetostr(mode_str, 11, mode);
                         fprintf(out, line, mode_str);
                     }
                     break;

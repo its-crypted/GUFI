@@ -880,20 +880,25 @@ size_t descend(struct QPTPool *ctx, const size_t id,
 }
 
 /* convert a mode to a human readable string */
-char * modetostr(char * str, const mode_t mode)
+char * modetostr(char * str, const size_t size, const mode_t mode)
 {
+    if (size < 11) {
+        return NULL;
+    }
+
     if (str) {
-        snprintf(str, 64, "----------");
-        if (mode &  S_IFDIR) str[0] = 'd';
-        if (mode &  S_IRUSR) str[1] = 'r';
-        if (mode &  S_IWUSR) str[2] = 'w';
-        if (mode &  S_IXUSR) str[3] = 'x';
-        if (mode &  S_IRGRP) str[4] = 'r';
-        if (mode &  S_IWGRP) str[5] = 'w';
-        if (mode &  S_IXGRP) str[6] = 'x';
-        if (mode &  S_IROTH) str[7] = 'r';
-        if (mode &  S_IWOTH) str[8] = 'w';
-        if (mode &  S_IXOTH) str[9] = 'x';
+        SNPRINTF(str, size, "----------");
+        if (S_ISDIR(mode))  str[0] = 'd';
+        if (S_ISLNK(mode))  str[0] = 'l';
+        if (mode & S_IRUSR) str[1] = 'r';
+        if (mode & S_IWUSR) str[2] = 'w';
+        if (mode & S_IXUSR) str[3] = 'x';
+        if (mode & S_IRGRP) str[4] = 'r';
+        if (mode & S_IWGRP) str[5] = 'w';
+        if (mode & S_IXGRP) str[6] = 'x';
+        if (mode & S_IROTH) str[7] = 'r';
+        if (mode & S_IWOTH) str[8] = 'w';
+        if (mode & S_IXOTH) str[9] = 'x';
     }
 
     return str;
