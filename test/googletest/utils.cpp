@@ -716,3 +716,49 @@ TEST(modetostr, directories) {
         EXPECT_STREQ(modetostr(actual, 11, mode), another_modetostr(expected, mode));
     }
 }
+
+TEST(remove_trailing, paths) {
+    const char expected[] = "/a/b/c";
+    const std::size_t expected_len = strlen(expected);
+
+    char root[MAXPATH]    = {};
+    char good[MAXPATH]    = {};
+    char slashes[MAXPATH] = {};
+    char nulls[MAXPATH]   = {};
+    char both[MAXPATH]    = {};
+
+    const char match[] = "/\x00";
+    const size_t match_len = strlen(match);
+
+    size_t len = 0;
+
+    SNFORMAT_S(root, MAXPATH, 1, "/", 1);
+    len = strlen(root);
+    EXPECT_EQ(remove_trailing(root, &len, match, match_len), 0);
+    EXPECT_EQ(len, 0U);
+    EXPECT_STREQ(root, "");
+
+    SNFORMAT_S(good, MAXPATH, 1, expected, expected_len);
+    len = strlen(good);
+    EXPECT_EQ(remove_trailing(good, &len, match, match_len), 0);
+    EXPECT_EQ(len, expected_len);
+    EXPECT_STREQ(good, expected);
+
+    SNFORMAT_S(slashes, MAXPATH, 1, expected, expected_len);
+    len = strlen(slashes);
+    EXPECT_EQ(remove_trailing(slashes, &len, match, match_len), 0);
+    EXPECT_EQ(len, expected_len);
+    EXPECT_STREQ(slashes, expected);
+
+    SNFORMAT_S(nulls, MAXPATH, 1, expected, expected_len);
+    len = strlen(nulls);
+    EXPECT_EQ(remove_trailing(nulls, &len, match, match_len), 0);
+    EXPECT_EQ(len, expected_len);
+    EXPECT_STREQ(nulls, expected);
+
+    SNFORMAT_S(both, MAXPATH, 1, expected, expected_len);
+    len = strlen(both);
+    EXPECT_EQ(remove_trailing(both, &len, match, match_len), 0);
+    EXPECT_EQ(len, expected_len);
+    EXPECT_STREQ(both, expected);
+}

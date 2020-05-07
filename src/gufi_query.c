@@ -968,12 +968,11 @@ int main(int argc, char *argv[])
     for(int i = idx; i < argc; i++) {
         /* remove trailing slashes */
         size_t len = strlen(argv[i]);
-        while (len && (argv[i][len] == '/')) {
-            len--;
-        }
+        remove_trailing(argv[i], &len, "/", 1);
 
         /* root is special case */
         if (len == 0) {
+            argv[i][0] = '/';
             len = 1;
         }
 
