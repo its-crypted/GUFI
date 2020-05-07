@@ -71,6 +71,7 @@ OF SUCH DAMAGE.
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <ctype.h>
 
 #include "config.h"
 #include "utils.h"
@@ -902,4 +903,30 @@ char * modetostr(char * str, const size_t size, const mode_t mode)
     }
 
     return str;
+}
+
+
+static int loop_matches(const char c, const char * match, const size_t match_count) {
+    for(size_t i = 0; i < match_count; i++) {
+        if (match[i] == c) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int remove_trailing(char * str, size_t * size,
+                    const char * match, const size_t match_count) {
+    if (!str || !size) {
+        return -1;
+    }
+
+    while (*size && loop_matches(str[(*size) - 1], match, match_count)) {
+        (*size)--;
+    }
+
+    str[*size] = '\x00';
+
+    return 0;
 }
