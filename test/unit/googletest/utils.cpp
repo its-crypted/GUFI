@@ -665,11 +665,13 @@ TEST(mkpath, childfirst) {
 static char * another_modetostr(char * str, const mode_t mode) {
     static const char rwx[] = "rwx";
     snprintf(str, 11, "----------");
-    if (mode & S_IFDIR) {
-        str[0] = 'd';
-    }
-    else if (mode & S_IFLNK) {
-        str[0] = 'l';
+    switch(mode & S_IFMT) {
+        case S_IFDIR:
+            str[0] = 'd';
+            break;
+        case S_IFLNK:
+            str[0] = 'l';
+            break;
     }
     str++;
 
