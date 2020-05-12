@@ -103,7 +103,7 @@ TEST(addqueryfuncs, path) {
 
     // the path returned by the query is the index prefix with the original basename
     char output[MAXPATH] = {};
-    ASSERT_EQ(sqlite3_exec(db, query, str_output, output, NULL), SQLITE_OK);
+    EXPECT_EQ(sqlite3_exec(db, query, str_output, output, nullptr), SQLITE_OK);
 
     EXPECT_STREQ(output, "/prefix0/prefix1/basename/level1/level2");
 

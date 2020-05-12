@@ -92,12 +92,15 @@ struct start_end {
 #define timestamp_set_start_raw(name)                                   \
     clock_gettime(CLOCK_MONOTONIC, &((name).start));
 
+#define timestamp_start_raw(name)                                       \
+    timestamp_create_raw(name);                                         \
+    timestamp_set_start_raw(name)
+
 #define timestamp_set_end_raw(name)                                     \
     clock_gettime(CLOCK_MONOTONIC, &((name).end));
 
 #define timestamp_print_raw(obs, id, str, name)                         \
     print_timer(obs, id, ts_buf, sizeof(ts_buf), str, &name)
-
 
 /* nanoseconds since an unspecified epoch */
 uint64_t since_epoch(struct timespec * ts);
@@ -129,7 +132,7 @@ int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const
     timestamp_create_raw(timestamp_get_name(name))
 
 #define timestamp_create_zero(name, zero)                               \
-    timestamp_create_zero_raw(timestamp_get_name(name))
+    timestamp_create_zero_raw(timestamp_get_name(name), zero)
 
 #define timestamp_start(name)                                           \
     timestamp_create(name);                                             \

@@ -86,7 +86,7 @@ function cleanup() {
     rm -rf ${TMP} ${SRC} ${INDEXROOT}
 }
 
-# trap cleanup EXIT
+trap cleanup EXIT
 
 cleanup
 

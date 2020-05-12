@@ -195,15 +195,13 @@ static void * worker_function(void * args) {
         timestamp_set_end(wf_cleanup);
 
         #if defined(DEBUG) && defined(PER_THREAD_STATS)
-        if (ctx->buffers) {
-            timestamp_print(ctx->buffers, wf_args->id, "wf_sll_init",       wf_sll_init);
-            timestamp_print(ctx->buffers, wf_args->id, "wf_tw_mutex_lock",  wf_tw_mutex_lock);
-            timestamp_print(ctx->buffers, wf_args->id, "wf_ctx_mutex_lock", wf_ctx_mutex_lock);
-            timestamp_print(ctx->buffers, wf_args->id, "wf_wait",           wf_wait);
-            timestamp_print(ctx->buffers, wf_args->id, "wf_move",           wf_move_queue);
-            timestamp_print(ctx->buffers, wf_args->id, "wf_process_queue",  wf_process_queue);
-            timestamp_print(ctx->buffers, wf_args->id, "wf_cleanup",        wf_cleanup);
-        }
+        timestamp_print(ctx->buffers, wf_args->id, "wf_sll_init",       wf_sll_init);
+        timestamp_print(ctx->buffers, wf_args->id, "wf_tw_mutex_lock",  wf_tw_mutex_lock);
+        timestamp_print(ctx->buffers, wf_args->id, "wf_ctx_mutex_lock", wf_ctx_mutex_lock);
+        timestamp_print(ctx->buffers, wf_args->id, "wf_wait",           wf_wait);
+        timestamp_print(ctx->buffers, wf_args->id, "wf_move",           wf_move_queue);
+        timestamp_print(ctx->buffers, wf_args->id, "wf_process_queue",  wf_process_queue);
+        timestamp_print(ctx->buffers, wf_args->id, "wf_cleanup",        wf_cleanup);
         #endif
     }
 
@@ -246,8 +244,6 @@ struct QPTPool * QPTPool_init(const size_t threads
 
     #if defined(DEBUG) && defined(PER_THREAD_STATS)
     ctx->buffers = buffers;
-    #else
-    ctx->buffers = NULL;
     #endif
 
     for(size_t i = 0; i < threads; i++) {
