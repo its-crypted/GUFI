@@ -87,8 +87,6 @@ struct QPTPool {
 
     #if defined(DEBUG) && defined(PER_THREAD_STATS)
     struct OutputBuffers * buffers;
-    #else
-    void * buffers;
     #endif
 
 };

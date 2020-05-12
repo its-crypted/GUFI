@@ -753,7 +753,7 @@ void sub_help() {
 int main(int argc, char * argv[]) {
     epoch = since_epoch(NULL);
 
-    timestamp_start(runtime);
+    timestamp_start_raw(runtime);
 
     int idx = parse_cmd_line(argc, argv, "hHn:X", 1, "GUFI_index ...", &in);
     if (in.helped)
@@ -821,8 +821,8 @@ int main(int argc, char * argv[]) {
     }
     free(stats);
 
-    timestamp_set_end(runtime);
-    fprintf(stderr, "Took %.2Lf seconds\n", timestamp_elapsed(runtime));
+    timestamp_set_end_raw(runtime);
+    fprintf(stderr, "Took %.2Lf seconds\n", elapsed(&runtime));
 
     return rc;
 }

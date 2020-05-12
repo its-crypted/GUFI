@@ -525,6 +525,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     timestamp_create_zero(opendir_call,       ta->start_time);
     timestamp_create_zero(open_call,          ta->start_time);
     timestamp_create_zero(sqlite3_open_call,  ta->start_time);
+    timestamp_create_zero(create_tables_call, ta->start_time);
     timestamp_create_zero(set_pragmas,        ta->start_time);
     timestamp_create_zero(load_extension,     ta->start_time);
     timestamp_create_zero(addqueryfuncs_call, ta->start_time);
@@ -566,8 +567,8 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
       db = opendb(dbname, in.open_flags, 1, 1,
                   NULL, NULL
                   #if defined(DEBUG) && defined(PER_THREAD_STATS)
-                  , &(sqlite3_open_call), &(create_tables_call)
-                  , &(set_pragmas), &(load_extension)
+                  , &timestamp_get_name(sqlite3_open_call), &timestamp_get_name(create_tables_call)
+                  , &timestamp_get_name(set_pragmas), &timestamp_get_name(load_extension)
                   #endif
                   );
     }
@@ -731,20 +732,20 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     timestamp_start(output_timestamps);
 
     timestamp_create_buffer(4096);
-    timestamp_print         (ctx->buffers,     id, "opendir",            opendir_call);
+    timestamp_print             (ctx->buffers, id, "opendir",            opendir_call);
     if (dir) {
         #ifndef NO_OPENDB
-        timestamp_print     (ctx->buffers,     id, "opendb",             open_call);
+        timestamp_print         (ctx->buffers, id, "opendb",             open_call);
         #endif
         if (db) {
-            timestamp_print (ctx->buffers,     id, "sqlite3_open_v2",    sqlite3_open_call);
-            timestamp_print (ctx->buffers,     id, "set_pragmas",        set_pragmas);
-            timestamp_print (ctx->buffers,     id, "load_extensions",    load_extension);
-            timestamp_print (ctx->buffers,     id, "create_tables",      create_tables_call);
+            timestamp_print     (ctx->buffers, id, "sqlite3_open_v2",    sqlite3_open_call);
+            timestamp_print     (ctx->buffers, id, "set_pragmas",        set_pragmas);
+            timestamp_print     (ctx->buffers, id, "load_extensions",    load_extension);
+            timestamp_print     (ctx->buffers, id, "create_tables",      create_tables_call);
             #ifndef NO_ADDQUERYFUNCS
-            timestamp_print (ctx->buffers,     id, "addqueryfuncs",      addqueryfuncs_call);
+            timestamp_print     (ctx->buffers, id, "addqueryfuncs",      addqueryfuncs_call);
             #endif
-            timestamp_print (ctx->buffers,     id, "descend",            descend_call);
+            timestamp_print     (ctx->buffers, id, "descend",            descend_call);
             print_descend_timers(ctx->buffers, id, "within_descend",     descend_timers, within_descend);
             print_descend_timers(ctx->buffers, id, "check_args",         descend_timers, check_args);
             print_descend_timers(ctx->buffers, id, "level",              descend_timers, level_cmp);
@@ -762,19 +763,19 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
             print_descend_timers(ctx->buffers, id, "set",                descend_timers, set);
             print_descend_timers(ctx->buffers, id, "clone",              descend_timers, make_clone);
             print_descend_timers(ctx->buffers, id, "pushdir",            descend_timers, pushdir);
-            timestamp_print (ctx->buffers,     id, "attach",             attach_call);
+            timestamp_print     (ctx->buffers, id, "attach",             attach_call);
             #ifndef NO_SQL_EXEC
-            timestamp_print (ctx->buffers,     id, "sqltsumcheck",       sqltsumcheck);
-            timestamp_print (ctx->buffers,     id, "sqltsum",            sqltsum);
-            timestamp_print (ctx->buffers,     id, "sqlsum",             sqlsum);
-            timestamp_print (ctx->buffers,     id, "sqlent",             sqlent);
+            timestamp_print     (ctx->buffers, id, "sqltsumcheck",       sqltsumcheck);
+            timestamp_print     (ctx->buffers, id, "sqltsum",            sqltsum);
+            timestamp_print     (ctx->buffers, id, "sqlsum",             sqlsum);
+            timestamp_print     (ctx->buffers, id, "sqlent",             sqlent);
             #endif
-            timestamp_print (ctx->buffers,     id, "detach",             detach_call);
-            timestamp_print (ctx->buffers,     id, "closedb",            close_call);
+            timestamp_print     (ctx->buffers, id, "detach",             detach_call);
+            timestamp_print     (ctx->buffers, id, "closedb",            close_call);
         }
-        timestamp_print     (ctx->buffers,     id, "closedir",           closedir_call);
-        timestamp_print     (ctx->buffers,     id, "utime",              utime_call);
-        timestamp_print     (ctx->buffers,     id, "free_work",          free_work);
+        timestamp_print         (ctx->buffers, id, "closedir",           closedir_call);
+        timestamp_print         (ctx->buffers, id, "utime",              utime_call);
+        timestamp_print         (ctx->buffers, id, "free_work",          free_work);
     }
 
     timestamp_set_end(output_timestamps);
@@ -782,13 +783,14 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
     #ifdef CUMULATIVE_TIMES
     pthread_mutex_lock(&print_mutex);
-    total_opendir_time           += elapsed(&opendir_call);
-    total_open_time              += elapsed(&open_call);
-    total_sqlite3_open_time      += elapsed(&sqlite3_open_call);
-    total_set_pragmas_time       += elapsed(&set_pragmas);
-    total_load_extension_time    += elapsed(&load_extension);
-    total_addqueryfuncs_time     += elapsed(&addqueryfuncs_call);
-    total_descend_time           += elapsed(&descend_call);
+    total_opendir_time           += timestamp_elapsed(opendir_call);
+    total_open_time              += timestamp_elapsed(open_call);
+    total_sqlite3_open_time      += timestamp_elapsed(sqlite3_open_call);
+    total_set_pragmas_time       += timestamp_elapsed(set_pragmas);
+    total_load_extension_time    += timestamp_elapsed(load_extension);
+    total_create_tables_time     += timestamp_elapsed(create_tables_call);
+    total_addqueryfuncs_time     += timestamp_elapsed(addqueryfuncs_call);
+    total_descend_time           += timestamp_elapsed(descend_call);
     total_check_args_time        += buffer_sum(&descend_timers[dt_check_args]);
     total_level_time             += buffer_sum(&descend_timers[dt_level_cmp]);
     total_level_branch_time      += buffer_sum(&descend_timers[dt_level_branch]);
@@ -805,16 +807,16 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     total_set_time               += buffer_sum(&descend_timers[dt_set]);
     total_clone_time             += buffer_sum(&descend_timers[dt_make_clone]);
     total_pushdir_time           += buffer_sum(&descend_timers[dt_pushdir]);
-    total_closedir_time          += elapsed(&closedir_call);
-    total_attach_time            += elapsed(&attach_call);
-    total_sqltsumcheck_time      += elapsed(&sqltsumcheck);
-    total_sqltsum_time           += elapsed(&sqltsum);
-    total_sqlsum_time            += elapsed(&sqlsum);
-    total_sqlent_time            += elapsed(&sqlent);
-    total_detach_time            += elapsed(&detach_call);
-    total_close_time             += elapsed(&close_call);
-    total_utime_time             += elapsed(&utime_call);
-    total_free_work_time         += elapsed(&free_work);
+    total_closedir_time          += timestamp_elapsed(closedir_call);
+    total_attach_time            += timestamp_elapsed(attach_call);
+    total_sqltsumcheck_time      += timestamp_elapsed(sqltsumcheck);
+    total_sqltsum_time           += timestamp_elapsed(sqltsum);
+    total_sqlsum_time            += timestamp_elapsed(sqlsum);
+    total_sqlent_time            += timestamp_elapsed(sqlent);
+    total_detach_time            += timestamp_elapsed(detach_call);
+    total_close_time             += timestamp_elapsed(close_call);
+    total_utime_time             += timestamp_elapsed(utime_call);
+    total_free_work_time         += timestamp_elapsed(free_work);
     total_output_timestamps_time += timestamp_elapsed(output_timestamps);
     pthread_mutex_unlock(&print_mutex);
     #endif
@@ -1092,10 +1094,10 @@ int main(int argc, char *argv[])
 
         char * err;
         if (sqlite3_exec(aggregate, in.aggregate, print_callback, &ca, &err) != SQLITE_OK) {
-            fprintf(stderr, "Final aggregation error: %s\n", err);
-            sqlite3_free(err);
+            fprintf(stderr, "Final aggregation error: %s: %s\n", in.aggregate, err);
             rc = -1;
         }
+        sqlite3_free(err);
 
         #if (defined(DEBUG) && defined(CUMULATIVE_TIMES)) || BENCHMARK
         timestamp_set_end(output);
