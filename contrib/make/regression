@@ -10,9 +10,9 @@ TARGETS=$(addprefix run, $(TESTS))
 
 all: $(TARGETS)
 
-run%: %.sh ../output-on-failure
+run%: %.sh ../../contrib/output-on-failure
 	@echo "Running Test: $<"
-	@../output-on-failure ./$^
+	@../../contrib/output-on-failure ./$^
 
 run: $(TARGETS)
 
