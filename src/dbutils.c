@@ -778,17 +778,17 @@ static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
     const size_t id = (size_t) (uintptr_t) sqlite3_user_data(context);
 
     /* get path found in summary */
-    const unsigned char *summary = sqlite3_value_text(argv[0]);
+    const char *summary = (char *) sqlite3_value_text(argv[0]);
 
     /* find first slash */
-    const unsigned char *s = summary;
+    const char *s = summary;
     while (*s && (*s != '/')) {
         s++;
     }
 
     /* join path segments, removing duplicate at join point */
     char final_path[MAXPATH];
-    SNPRINTF(final_path, MAXPATH, "%s%s", gps[id].gpath, s);
+    SNFORMAT_S(final_path, MAXPATH, 2, gps[id].gpath, strlen(gps[id].gpath), s,strlen(s));
 
     sqlite3_result_text(context, final_path, -1, SQLITE_TRANSIENT);
 
