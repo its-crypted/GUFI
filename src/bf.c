@@ -145,6 +145,7 @@ void print_help(const char* prog_name,
       case 'f': printf("  -f <FORMAT>            use the specified FORMAT instead of the default; output a newline after each use of FORMAT\n"); break;
       case 'j': printf("  -j                     print the information in terse form\n"); break;
       case 'X': printf("  -X                     Dry run\n"); break;
+      case 'L': printf("  -L                     Highest number of files/links in a directory allowed to be rolled up\n"); break;
 
       default: printf("print_help(): unrecognized option '%c'\n", (char)ch);
       }
@@ -201,6 +202,7 @@ void show_input(struct input* in, int retval) {
    printf("in.format             = '%s'\n",  in->format);
    printf("in.terse              = %d\n",    in->terse);
    printf("in.dry_run            = %d\n",    in->dry_run);
+   printf("in.max_in_dir         = %zu\n",   in->max_in_dir);
    printf("\n");
    printf("retval                = %d\n",    retval);
    printf("\n");
@@ -256,6 +258,7 @@ int parse_cmd_line(int         argc,
    memset(in->format,       0, MAXPATH);
    in->terse              = 0;
    in->dry_run            = 0;
+   in->max_in_dir         = (size_t) -1;
 
    int show   = 0;
    int retval = 0;
@@ -468,6 +471,10 @@ int parse_cmd_line(int         argc,
 
       case 'X':
           in->dry_run = 1;
+          break;
+
+      case 'L':
+          INSTALL_UINT(in->max_in_dir, optarg, (size_t) 0, (size_t) -1, "-L");
           break;
 
       case '?':

@@ -455,11 +455,13 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
         > 0 - rollup score
 */
 int can_rollup(struct RollUp * rollup,
+               struct DirStats * ds,
                sqlite3 * dst
                timestamp_sig) {
-    /* if (!rollup || !dst) { */
+    /* if (!rollup || !ds || !dst) { */
     /*     return -1; */
     /* } */
+
     char * err = NULL;
 
     timestamp_create_buffer(4096);
@@ -467,6 +469,11 @@ int can_rollup(struct RollUp * rollup,
 
     /* default to cannot roll up */
     int legal = 0;
+
+    /* if a directory has too many immediate files/links, don't roll up */
+    if (ds->subnondir_count >= in.max_in_dir) {
+        goto end_can_rollup;
+    }
 
     /* all subdirectories are expected to pass */
     size_t total_subdirs = 0;
@@ -692,7 +699,7 @@ void rollup(void * args timestamp_sig) {
         timestamp_end(timestamp_buffers, id, "nondir_count", nondir_count);
 
         /* check if rollup is allowed */
-        ds->score = can_rollup(dir, dst timestamp_args);
+        ds->score = can_rollup(dir, ds, dst timestamp_args);
 
         /* if can roll up */
         if (ds->score > 0) {
@@ -755,7 +762,7 @@ int main(int argc, char * argv[]) {
 
     timestamp_start_raw(runtime);
 
-    int idx = parse_cmd_line(argc, argv, "hHn:X", 1, "GUFI_index ...", &in);
+    int idx = parse_cmd_line(argc, argv, "hHn:L:X", 1, "GUFI_index ...", &in);
     if (in.helped)
         sub_help();
     if (idx < 0)

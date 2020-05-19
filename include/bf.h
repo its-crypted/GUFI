@@ -198,6 +198,7 @@ struct input {
 
    /* only used by rollup */
    int dry_run;
+   size_t max_in_dir;
 };
 extern struct input in;
 
