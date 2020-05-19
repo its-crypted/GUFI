@@ -114,8 +114,8 @@ foreach(NAME ${CONTRIB} ${SRC})
   configure_file("${NAME}.sh"       "${NAME}.sh"       COPYONLY)
   configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
 
-  add_test(NAME ${NAME} COMMAND "${NAME}.sh")
-  set_tests_properties(${NAME} PROPERTIES LABELS regression)
+  add_test(NAME "${NAME}" COMMAND "${NAME}.sh")
+  set_tests_properties("${NAME}" PROPERTIES LABELS "regression")
 endforeach()
 
 foreach(NAME ${SCRIPTS})
@@ -123,8 +123,11 @@ foreach(NAME ${SCRIPTS})
   configure_file("${NAME}.py"       "${NAME}.py"       COPYONLY)
   configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
 
-  add_test(NAME ${NAME} COMMAND "${NAME}.sh")
-  set_tests_properties(${NAME} PROPERTIES LABELS regression)
+  add_test(NAME "${NAME}" COMMAND "${NAME}.sh" 0)
+  set_tests_properties("${NAME}" PROPERTIES LABELS "regression")
+
+  add_test(NAME "${NAME}+rollup" COMMAND "${NAME}.sh" 1)
+  set_tests_properties("${NAME}+rollup" PROPERTIES LABELS "regression;rollup")
 endforeach()
 
 foreach(NAME ${SUDO})

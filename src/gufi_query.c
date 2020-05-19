@@ -422,12 +422,16 @@ struct ThreadArgs {
 struct DirData {
     ino_t inode;
     int rollup_score;
+    size_t min_level;
+    size_t max_level;
 };
 
 int get_dir_data(void * args, int count, char **data, char **columns) {
     struct DirData * dd = (struct DirData *) args;
     dd->inode = atoi(data[0]);
     dd->rollup_score = atoi(data[1]);
+    dd->min_level = atoi(data[2]);
+    dd->max_level = atoi(data[3]);
     return 0;
 }
 
@@ -521,16 +525,6 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     timestamp_set_end(open_call);
     #endif
 
-    struct DirData dd = {0};
-    if (db) {
-        char * err = NULL;
-        if (sqlite3_exec(db, "SELECT inode, rollupscore FROM summary WHERE isroot == 1", get_dir_data, &dd, &err) != SQLITE_OK) {
-            fprintf(stderr, "Could not get initial summary data from \"%s\": %s", work->name, err);
-            sqlite3_free(err);
-            goto close_db;
-        }
-    }
-
     #ifndef NO_ADDQUERYFUNCS
     timestamp_set_start(addqueryfuncs_call);
     /* this is needed to add some query functions like path() uidtouser() gidtogroup() */
@@ -541,6 +535,18 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     }
     timestamp_set_end(addqueryfuncs_call);
     #endif
+
+    struct DirData dd = {0};
+    if (db) {
+        char * err = NULL;
+        if (sqlite3_exec(db, "SELECT (SELECT inode FROM SUMMARY WHERE isroot == 1), (SELECT rollupscore FROM summary WHERE isroot == 1), (SELECT MIN(level(name)) FROM SUMMARY), (SELECT MAX(level(name)) FROM summary)", get_dir_data, &dd, &err) != SQLITE_OK) {
+            fprintf(stderr, "Could not get initial summary data from \"%s\": %s", work->name, err);
+            sqlite3_free(err);
+            goto close_db;
+        }
+    }
+
+    /* fprintf(stderr, "%zu [%zu %zu] [%zu %zu]\n", work->level, dd.min_level, dd.max_level, in.min_level, in.max_level); */
 
     recs=1; /* set this to one record - if the sql succeeds it will set to 0 or 1 */
             /* if it fails then this will be set to 1 and will go on */
@@ -592,7 +598,10 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
 
         if (db) {
             /* only query this level if the min_level has been reached */
-            if (work->level >= in.min_level) {
+            /* if (work->level >= in.min_level) { */
+            if ((work->level >= in.min_level) ||
+                ((dd.min_level <= in.min_level) && (in.min_level <= dd.max_level)) ||
+                ((dd.min_level <= in.max_level) && (in.max_level <= dd.max_level))) {
                 /* run query on summary, print it if printing is needed, if returns none */
                 /* and we are doing AND, skip querying the entries db */
                 /* memset(endname, 0, sizeof(endname)); */

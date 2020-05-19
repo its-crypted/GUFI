@@ -69,6 +69,14 @@ ROOT="$(dirname ${ROOT})"
 ROOT="$(dirname ${ROOT})"
 ROOT="$(dirname ${ROOT})"
 
+if [[ "$#" -lt 1 ]]
+then
+    echo "Syntax: $0 rollup?"
+    exit 1
+fi
+
+ROLLUP="$1"
+
 # gufi_find wrapper
 GUFI_FIND="${ROOT}/test/regression/gufi_find.py"
 
@@ -76,7 +84,7 @@ GUFI_FIND="${ROOT}/test/regression/gufi_find.py"
 SRCDIR="prefix"
 INDEXROOT="${SRCDIR}.gufi"
 
-source ${ROOT}/test/regression/setup.sh "${ROOT}" "${SRCDIR}" "${INDEXROOT}"
+source ${ROOT}/test/regression/setup.sh "${ROOT}" "${SRCDIR}" "${INDEXROOT}" "${ROLLUP}"
 
 OUTPUT="gufi_find.out"
 

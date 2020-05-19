@@ -64,15 +64,16 @@
 
 # source this file in regression test scripts
 
-if [[ "$#" -lt 3 ]]
+if [[ "$#" -lt 4 ]]
 then
-    echo "Syntax: $0 root srcdir indexroot"
+    echo "Syntax: $0 root srcdir indexroot rollup?"
     exit 1
 fi
 
 ROOT="$1"
 SRCDIR="$2"
 INDEXROOT="$3"
+ROLLUP="$4"
 CONFIG="config.test"
 
 function setup_cleanup {
@@ -99,3 +100,8 @@ ${ROOT}/test/regression/generatetree "${SRCDIR}"
 
 # generate the index
 ${ROOT}/src/gufi_dir2index -x "${SRCDIR}" "${INDEXROOT}"
+
+if [[ "${ROLLUP}" -eq 1 ]]
+then
+    ${ROOT}/src/rollup "${INDEXROOT}" > /dev/null 2>&1
+fi

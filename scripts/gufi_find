@@ -618,6 +618,19 @@ def run(argv, config_path):
     S = None
     E = None
 
+    S_level = []
+    E_level = []
+
+    if args.maxdepth is not None:
+        maxdepth = ['level({}.name) <= {}'.format(SUMMARY, args.maxdepth)]
+        S_level += maxdepth
+        E_level += maxdepth
+
+    if args.mindepth is not None:
+        mindepth = ['level({}.name) >= {}'.format(SUMMARY, args.mindepth)]
+        S_level += mindepth
+        E_level += mindepth
+
     # aggregation is required
     if need_aggregation(args):
         columns = ['name', 'type', 'inode', 'mode', 'nlink', 'uid',
@@ -641,7 +654,7 @@ def run(argv, config_path):
             args.inmemory_name,
             gufi_common.build_query(['NULL', 'path(name) as fullpath'] + ['{}.{}'.format(SUMMARY, column) for column in columns],
                                     [SUMMARY],
-                                    build_where(args, SUMMARY),
+                                    build_where(args, SUMMARY) + S_level,
                                     build_group_by(args, SUMMARY),
                                     build_order_by(args, SUMMARY),
                                     args.num_results))
@@ -650,7 +663,7 @@ def run(argv, config_path):
             args.inmemory_name,
             gufi_common.build_query(['NULL', 'path({}.name) as fullpath'.format(SUMMARY)] + ['{}.{}'.format(PENTRIES, column) for column in columns],
                                     [SUMMARY, PENTRIES],
-                                    build_where(args, PENTRIES) + ['{}.inode == {}.pinode'.format(SUMMARY, PENTRIES)],
+                                    build_where(args, PENTRIES) + ['{}.inode == {}.pinode'.format(SUMMARY, PENTRIES)] + E_level,
                                     build_group_by(args, PENTRIES),
                                     build_order_by(args, PENTRIES),
                                     args.num_results))
@@ -679,14 +692,14 @@ def run(argv, config_path):
     else:
         S = gufi_common.build_query(build_output(args, SUMMARY),
                                     [SUMMARY],
-                                    build_where(args, SUMMARY),
+                                    build_where(args, SUMMARY) + S_level,
                                     build_group_by(args, SUMMARY),
                                     build_order_by(args, SUMMARY),
                                     args.num_results)
 
         E = gufi_common.build_query(build_output(args, PENTRIES),
                                     [SUMMARY, PENTRIES],
-                                    build_where(args, PENTRIES) + ['{}.inode == {}.pinode'.format(SUMMARY, PENTRIES)],
+                                    build_where(args, PENTRIES) + ['{}.inode == {}.pinode'.format(SUMMARY, PENTRIES)] + E_level,
                                     build_group_by(args, PENTRIES),
                                     build_order_by(args, PENTRIES),
                                     args.num_results)
