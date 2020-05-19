@@ -546,8 +546,6 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         }
     }
 
-    /* fprintf(stderr, "%zu [%zu %zu] [%zu %zu]\n", work->level, dd.min_level, dd.max_level, in.min_level, in.max_level); */
-
     recs=1; /* set this to one record - if the sql succeeds it will set to 0 or 1 */
             /* if it fails then this will be set to 1 and will go on */
 

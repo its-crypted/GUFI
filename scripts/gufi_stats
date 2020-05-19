@@ -82,6 +82,9 @@ ORDER = {'ASC'   : ASCENDING,
          'least' : ASCENDING,
          'most'  : DESCENDING}
 
+SUMMARY  = 'summary'
+PENTRIES = 'pentries'
+
 def build_create(name, columns):
     return 'CREATE TABLE {0}({1})'.format(name, ', '.join(columns))
 
@@ -121,7 +124,7 @@ def depth(config, args, where):
 
         '-S', 'INSERT INTO {} {} '.format(args.inmemory_name,
                                           gufi_common.build_query(['path(name)', '0'],
-                                                                  ['summary'],
+                                                                  [SUMMARY],
                                                                   where,
                                                                   None,
                                                                   None,
@@ -177,7 +180,7 @@ def filesize(config, args, where):
 
         '-E', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                           gufi_common.build_query(['path((SELECT name FROM summary WHERE summary.inode == pentries.pinode))', 'CAST(TOTAL(size) as INT64)'],
-                                                                  ['pentries'],
+                                                                  [PENTRIES],
                                                                   where + ['type == "f"'],
                                                                   None,
                                                                   None,
@@ -241,7 +244,7 @@ def entries_count(config, args, where, type):
 
         '-E', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['path((SELECT summary.name FROM summary))', 'COUNT(pentries.inode)'],
-                                                                 ['pentries'],
+                                                                 [PENTRIES],
                                                                  where + ['pentries.type == "{}"'.format(type)],
                                                                  None,
                                                                  None,
@@ -305,7 +308,7 @@ def total_filesize(config, args, where):
             '-E',
             'INSERT INTO {} {}'.format(args.inmemory_name,
                                        gufi_common.build_query(['NULL', 'totsize'],
-                                                               ['summary'],
+                                                               [SUMMARY],
                                                                where,
                                                                None,
                                                                None,
@@ -347,7 +350,7 @@ def total_filesize(config, args, where):
             '-E',
             'INSERT INTO {} {}'.format(args.inmemory_name,
                                        gufi_common.build_query(['NULL', 'uid', 'SUM(size)'],
-                                                               ['pentries'],
+                                                               [PENTRIES],
                                                                where + ['type == "f"'],
                                                                group_by,
                                                                order_by,
@@ -402,7 +405,7 @@ def total_entries_count(config, args, where, type):
 
         '-E', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['NULL', 'uid', 'COUNT(*) AS count'],
-                                                                 ['entries'],
+                                                                 [PENTRIES],
                                                                  where + ['type == "{}"'.format(type)],
                                                                  group_by,
                                                                  ['count {}'.format(ORDER[args.order]), 'uid {}'.format(ORDER[args.order])],
@@ -464,7 +467,7 @@ def dircount(config, args, where):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['fpath()', 'inode', 'pinode'],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where,
                                                                  None,
                                                                  None,
@@ -509,8 +512,8 @@ def total_dircount(config, args, where):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['NULL', 'uid', '1 as count'],
-                                                                 ['summary'],
-                                                                 where + ['level() > 0'],
+                                                                 [SUMMARY],
+                                                                 where + ['level(name) > 0'],
                                                                  group_by,
                                                                  ['count {}'.format(ORDER[args.order]), 'uid {}'.format(ORDER[args.order])],
                                                                  args.num_results,
@@ -557,7 +560,7 @@ def leaf_dirs(config, args, where):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['path(name)'],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where + ['nlink == 2'],
                                                                  None,
                                                                  None,
@@ -610,7 +613,7 @@ def leaf_depth(config, args, where):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['path(name)', '0'],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where + ['nlink == 2'],
                                                                  None,
                                                                  None,
@@ -663,7 +666,7 @@ def leaf(config, args, where, type):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['path(name)', '(SELECT COUNT(*) FROM entries WHERE type=="{}")'.format(type)],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where + ['nlink == 2'],
                                                                  None,
                                                                  None,
@@ -720,7 +723,7 @@ def total_leaf(config, args, where, type):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['uid', '(SELECT COUNT(*) FROM entries WHERE type=="{}") AS count'.format(type)],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where + ['nlink == 2'],
                                                                  group_by,
                                                                  ['uid {}'.format(ORDER[args.order]), 'count {}'.format(ORDER[args.order])],
@@ -766,7 +769,7 @@ def median_leaf_files(config, args, where):
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
                                          gufi_common.build_query(['uid', '(SELECT COUNT(*) FROM entries WHERE type=="f") AS count'],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where + ['nlink == 2'],
                                                                  None,
                                                                  None,
@@ -803,7 +806,7 @@ def average_leaf(config, args, where, type):
     group_by = ['uid'] if args.cumulative else None
 
     count = gufi_common.build_query(['COUNT(*)'],
-                                    ['entries'],
+                                    [PENTRIES],
                                     ['type == "{}"'.format(type)],
                                     group_by,
                                     None,
@@ -817,7 +820,7 @@ def average_leaf(config, args, where, type):
                                                                   'uid',
                                                                   '({}) AS count'.format(count)
                                                               ],
-                                                                 ['summary'],
+                                                                 [SUMMARY],
                                                                  where + ['nlink == 2'],
                                                                  None,
                                                                  None,
@@ -904,8 +907,8 @@ def per_level(config, args, where, type):
         '-I', build_create(args.inmemory_name, ['id INT PRIMARY KEY'] + ([] if args.cumulative else ['uid INT64']) + ['level INT64', 'count INT64']),
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
-                                         gufi_common.build_query(['NULL'] + uid + ['level() + {}'.format(starting_depth), count],
-                                                                 ['summary'],
+                                         gufi_common.build_query(['NULL'] + uid + ['level(name) + {}'.format(starting_depth), count],
+                                                                 [SUMMARY],
                                                                  where,
                                                                  ['uid'],
                                                                  None,
