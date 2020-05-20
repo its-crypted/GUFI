@@ -463,7 +463,7 @@ def dircount(config, args, where):
         '-I', build_create(args.inmemory_name, ['path TEXT', 'inode INT64', 'pinode INT64']),
 
         '-S', 'INSERT INTO {} {}'.format(args.inmemory_name,
-                                         gufi_common.build_query(['fpath()', 'inode', 'pinode'],
+                                         gufi_common.build_query(['path(name)', 'inode', 'pinode'],
                                                                  ['summary'],
                                                                  where,
                                                                  None,
