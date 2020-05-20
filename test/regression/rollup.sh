@@ -110,7 +110,7 @@ then
 fi
 
 function replace() {
-    echo "$@" | sed "s/[[:space:]]*$//g; s/${GUFI_QUERY//\//\\/}/gufi_query/g; s/${GUFI_FIND//\//\\/}/gufi_find/g; s/${GUFI_LS//\//\\/}/gufi_ls/g; s/${GUFI_STATS//\//\\/}/gufi_stats/g; s/${INDEXROOT//\//\\/}\\///g; s/\\/${SRCDIR//\//\\/}/./g; s/${ID1}/1001/g; s/${ID2}/1002/g; s/${ID3}/1003/g"
+    echo "$@" | sed "s/[[:space:]]*$//g; s/${GUFI_QUERY//\//\\/}/gufi_query/g; s/${GUFI_FIND//\//\\/}/gufi_find/g; s/${GUFI_LS//\//\\/}/gufi_ls/g; s/${GUFI_STATS//\//\\/}/gufi_stats/g; s/${INDEXROOT//\//\\/}\\//prefix.gufi/g; s/\\/${SRC//\//\\/}/./g; s/${ID1}/1001/g; s/${ID2}/1002/g; s/${ID3}/1003/g"
 }
 
 function run() {

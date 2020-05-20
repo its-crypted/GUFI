@@ -110,7 +110,7 @@ struct RollUpStats {
 size_t rollup_distribution(const char * name, size_t * distribution) {
     size_t total = 0;
     fprintf(stderr, "    %s:\n", name);
-    for(size_t i = 1; i < 5; i++) {
+    for(size_t i = 1; i < 6; i++) {
         fprintf(stderr, "        %zu: %19zu\n", i, distribution[i]);
         total += distribution[i];
     }
@@ -209,8 +209,8 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     print_stanza("Rolled Up:",     &rolled_up,     threads);
 
     /* get distribution of roll up scores */
-    size_t successful[5] = {0};
-    size_t failed[5] = {0};
+    size_t successful[6] = {0};
+    size_t failed[6] = {0};
     sll_loop(&rolled_up, node) {
         struct DirStats * ds = (struct DirStats *) sll_node_data(node);
         (ds->success?successful:failed)[ds->score]++;
@@ -344,8 +344,13 @@ int get_permissions(void * args, int count, char ** data, char ** columns) {
          2 - self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx
          3 - self and subdirectories have same user permissions, go-rx, uid
          4 - self and subdirectories have same user, group, and others permissions, uid, and gid
+         5 - leaf directory
 */
 int check_permissions(struct Permissions * curr, const size_t child_count, struct sll * child_list, const size_t id timestamp_sig) {
+    if (child_count == 0) {
+        return 5;
+    }
+
     timestamp_create_buffer(4096);
 
     struct Permissions * child_perms = malloc(sizeof(struct Permissions) * sll_get_size(child_list));
@@ -428,19 +433,19 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
     free(child_perms);
 
     if (o_plus_rx == child_count) {
-      return 1;
+        return 1;
     }
 
     if (ugo == child_count) {
-      return 4;
+        return 4;
     }
 
     if (ug == child_count) {
-      return 2;
+        return 2;
     }
 
     if (u == child_count) {
-      return 3;
+        return 3;
     }
 
     return 0;
