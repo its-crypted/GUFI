@@ -127,9 +127,9 @@ function run() {
 # 24 files: (6 files * [o+rx, ugo, ug, u])
 mkdir ${TMP}                    # 0
 mkdir -m 005 ${TMP}/o+rx        #  1
-mkdir -m 007 ${TMP}/o+rx/dir1   #   1
+mkdir -m 707 ${TMP}/o+rx/dir1   #   1
 touch ${TMP}/o+rx/dir1/file1
-mkdir -m 005 ${TMP}/o+rx/dir2   #   1
+mkdir -m 075 ${TMP}/o+rx/dir2   #   1
 touch ${TMP}/o+rx/dir2/file1
 touch ${TMP}/o+rx/dir2/file2
 mkdir -m 007 ${TMP}/o+rx/dir3   #   1
@@ -137,17 +137,17 @@ touch ${TMP}/o+rx/dir3/file1
 touch ${TMP}/o+rx/dir3/file2
 touch ${TMP}/o+rx/dir3/file3
 mkdir -m 776 ${TMP}/ugo         #  4
-mkdir -m 776 ${TMP}/ugo/dir1    #   1
+mkdir -m 576 ${TMP}/ugo/dir1    #   1
 touch ${TMP}/ugo/dir1/file1
-mkdir -m 776 ${TMP}/ugo/dir2    #   1
+mkdir -m 756 ${TMP}/ugo/dir2    #   1
 touch ${TMP}/ugo/dir2/file1
 touch ${TMP}/ugo/dir2/file2
-mkdir -m 776 ${TMP}/ugo/dir3    #   1
+mkdir -m 774 ${TMP}/ugo/dir3    #   1
 touch ${TMP}/ugo/dir3/file1
 touch ${TMP}/ugo/dir3/file2
 touch ${TMP}/ugo/dir3/file3
 mkdir -m 770 ${TMP}/ug          #  2
-mkdir -m 770 ${TMP}/ug/dir1     #   1
+mkdir -m 750 ${TMP}/ug/dir1     #   1
 touch ${TMP}/ug/dir1/file1
 mkdir -m 773 ${TMP}/ug/dir2     #   1
 touch ${TMP}/ug/dir2/file1
@@ -157,7 +157,7 @@ touch ${TMP}/ug/dir3/file1
 touch ${TMP}/ug/dir3/file2
 touch ${TMP}/ug/dir3/file3
 mkdir -m 700 ${TMP}/u           #  3
-mkdir -m 700 ${TMP}/u/dir1      #   1
+mkdir -m 770 ${TMP}/u/dir1      #   1
 touch ${TMP}/u/dir1/file1
 mkdir -m 703 ${TMP}/u/dir2      #   1
 touch ${TMP}/u/dir2/file1
