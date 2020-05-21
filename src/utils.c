@@ -71,7 +71,6 @@ OF SUCH DAMAGE.
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <ctype.h>
 
 #include "config.h"
 #include "utils.h"
@@ -622,13 +621,16 @@ int SNPRINTF(char * str, size_t size, const char *format, ...) {
    unnecessary calls to strlen). Make sure to typecast the lengths
    to size_t or weird bugs may occur */
 size_t SNFORMAT_S(char * dst, const size_t dst_len, size_t count, ...) {
-    va_list args;
     size_t max_len = dst_len - 1;
 
+    va_list args;
     va_start(args, count);
     for(size_t i = 0; i < count; i++) {
-        char * src = va_arg(args, char *);
-        size_t len = va_arg(args, size_t);
+        const char * src = va_arg(args, char *);
+        /* size_t does not work, but solution found at */
+        /* https://stackoverflow.com/a/12864069/341683 */
+        /* does not seem to fix it either */
+        const size_t len = va_arg(args, unsigned int);
         const size_t copy_len = (len < max_len)?len:max_len;
         memcpy(dst, src, copy_len);
         dst += copy_len;

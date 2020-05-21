@@ -360,8 +360,8 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
     sll_loop(child_list, node) {
         struct RollUp * child = (struct RollUp *) sll_node_data(node);
 
-        char dbname[MAXPATH];
-        SNFORMAT_S(dbname, MAXPATH, 3, child->data.name, strlen(child->data.name), "/", 1, DBNAME, DBNAME_LEN);
+        char dbname[MAXPATH] = {0};
+        SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, child->data.name);
 
         timestamp_start(open_child_db);
         sqlite3 * db = opendb(dbname, SQLITE_OPEN_READONLY, 1, 0
@@ -655,7 +655,7 @@ void rollup(void * args timestamp_sig) {
     const size_t name_len = strlen(dir->data.name);
 
     char dbname[MAXPATH];
-    SNFORMAT_S(dbname, MAXPATH, 3, dir->data.name, name_len, "/", 1, DBNAME, DBNAME_LEN);
+    SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, dir->data.name);
 
     struct RollUpStats * stats = (struct RollUpStats *) dir->data.extra_args;
 
