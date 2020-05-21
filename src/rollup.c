@@ -558,9 +558,9 @@ int get_nondirs(struct RollUp * rollup, struct DirStats * ds, sqlite3 * dst time
 }
 
 /*
-@return < 0 - could not move entries into pentries
-          0 - success
-        > 0 - at least one subdirectory failed to be moved
+@return -1 - could not move entries into pentries
+         0 - success
+         1 - at least one subdirectory failed to be moved
 */
 int do_rollup(struct RollUp * rollup,
               struct DirStats * ds,
@@ -600,9 +600,6 @@ int do_rollup(struct RollUp * rollup,
         goto end_rollup;
     }
 
-    /* if any subdir fails to roll up, record it */
-    int failed_rollup = 0;
-
     /* process each subdirectory */
     timestamp_start(rollup_subdirs);
 
@@ -611,43 +608,33 @@ int do_rollup(struct RollUp * rollup,
 
         struct BottomUp * child = (struct BottomUp *) sll_node_data(node);
 
-        char child_db_name[MAXPATH];
-        SNFORMAT_S(child_db_name, MAXPATH, 3, child->name, strlen(child->name), "/", 1, DBNAME, DBNAME_LEN);
-
-        size_t child_failed = 0;
+        char child_dbname[MAXPATH];
+        SNFORMAT_S(child_dbname, MAXPATH, 3, child->name, strlen(child->name), "/", 1, DBNAME, DBNAME_LEN);
 
         /* attach subdir database file as 'SUBDIR_ATTACH_NAME' */
-        child_failed = !attachdb(child_db_name, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY);
+        rc = !attachdb(child_dbname, dst, SUBDIR_ATTACH_NAME, SQLITE_OPEN_READONLY);
 
         /* roll up the subdir into this dir */
-        if (!child_failed) {
+        if (!rc) {
             timestamp_start(rollup_subdir);
             exec_rc = sqlite3_exec(dst, rollup_subdir, NULL, NULL, &err);
             timestamp_end(timestamp_buffers, id, "rollup_subdir", rollup_subdir);
             if (exec_rc != SQLITE_OK) {
                 fprintf(stderr, "Error: Failed to copy \"%s\" subdir pentries into pentries table: %s\n", child->name, err);
-                child_failed = 1;
             }
         }
 
         /* always detach subdir */
-        detachdb(child_db_name, dst, SUBDIR_ATTACH_NAME);
+        detachdb(child_dbname, dst, SUBDIR_ATTACH_NAME);
 
         timestamp_end(timestamp_buffers, id, "rollup_subdir", rollup_subdir);
 
-        if ((failed_rollup = child_failed)) {
+        if (rc) {
             break;
         }
     }
 
     timestamp_end(timestamp_buffers, id, "rollup_subdirs", rollup_subdirs);
-
-    if (failed_rollup) {
-        rc = (int) failed_rollup;
-    }
-    else {
-        rollup->rolledup = ds->score;
-    }
 
 end_rollup:
     sqlite3_free(err);

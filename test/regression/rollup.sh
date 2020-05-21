@@ -76,20 +76,20 @@ GUFI_LS="${ROOT}/test/regression/gufi_ls.py"
 GUFI_STATS="${ROOT}/test/regression/gufi_stats.py"
 
 TMP="tmp"
-SRC="prefix"
-INDEXROOT="${SRC}.gufi"
+SRCDIR="prefix"
+INDEXROOT="${SRCDIR}.gufi"
+
+source ${ROOT}/test/regression/setup.sh "${ROOT}" "${SRCDIR}" "${INDEXROOT}"
+
 OUTPUT="rollup.out"
 
-source ${ROOT}/test/regression/setup.sh "${ROOT}" "${SRC}" "${INDEXROOT}"
-
 function cleanup() {
-    rm -rf ${TMP} ${SRC} ${INDEXROOT}
+    rm -rf "${TMP}" "${SRCDIR}" "${INDEXROOT}"
 }
 
 trap cleanup EXIT
 
 cleanup
-
 
 ID1="1001"
 if id -un 1001 > /dev/null 2>&1;
@@ -110,7 +110,7 @@ then
 fi
 
 function replace() {
-    echo "$@" | sed "s/[[:space:]]*$//g; s/${GUFI_QUERY//\//\\/}/gufi_query/g; s/${GUFI_FIND//\//\\/}/gufi_find/g; s/${GUFI_LS//\//\\/}/gufi_ls/g; s/${GUFI_STATS//\//\\/}/gufi_stats/g; s/${INDEXROOT//\//\\/}\\//prefix.gufi/g; s/\\/${SRC//\//\\/}/./g; s/${ID1}/1001/g; s/${ID2}/1002/g; s/${ID3}/1003/g"
+    echo "$@" | sed "s/[[:space:]]*$//g; s/${GUFI_QUERY//\//\\/}/gufi_query/g; s/${GUFI_FIND//\//\\/}/gufi_find/g; s/${GUFI_LS//\//\\/}/gufi_ls/g; s/${GUFI_STATS//\//\\/}/gufi_stats/g; s/${INDEXROOT//\//\\/}\\//prefix.gufi\\//g; s/\\/${SRCDIR//\//\\/}/./g; s/${ID1}/1001/g; s/${ID2}/1002/g; s/${ID3}/1003/g"
 }
 
 function run() {
@@ -168,20 +168,20 @@ touch ${TMP}/u/dir3/file2
 touch ${TMP}/u/dir3/file3
 
 # copy ${TMP} 3 times to different users
-# 4 not rolled up: ${SRC} + (3 * ${TMP})
+# 4 not rolled up: ${SRCDIR} + (3 * ${TMP})
 # 48 rolled up: (3 * 16 dirs in ${TMP}
 # 72 files: 3 * 24 files in ${TMP}
-mkdir ${SRC}
-cp -R ${TMP} ${SRC}/1001
-chown -R 1001:1001 ${SRC}/1001
-cp -R ${TMP} ${SRC}/1002
-chown -R 1002:1002 ${SRC}/1002
-cp -R ${TMP} ${SRC}/1003
-chown -R 1003:1003 ${SRC}/1003
+mkdir -m 777 ${SRCDIR}
+cp -R ${TMP} ${SRCDIR}/1001
+chown -R 1001:1001 ${SRCDIR}/1001
+cp -R ${TMP} ${SRCDIR}/1002
+chown -R 1002:1002 ${SRCDIR}/1002
+cp -R ${TMP} ${SRCDIR}/1003
+chown -R 1003:1003 ${SRCDIR}/1003
 rm -r ${TMP}
 
-${GUFI_DIR2INDEX} ${SRC} ${INDEXROOT}
-${ROLLUP} -X ${INDEXROOT} 2>&1 | head -n -1
+${GUFI_DIR2INDEX} ${SRCDIR} ${INDEXROOT}
+${ROLLUP} ${INDEXROOT} 2>&1 | head -n -1
 
 # get results from querying
 replace "$ ${GUFI_QUERY} -d \" \" -S \"SELECT path(name) from summary\" \"${INDEXROOT}\" | wc -l"
@@ -211,6 +211,7 @@ echo
 # gufi_ls
 run "${GUFI_LS}"
 run "${GUFI_LS} 1001"
+echo "# nothing (for now) because 1001/o+rx was rolled up, and level() could not get to 1"
 run "${GUFI_LS} 1001/o+rx"
 run "${GUFI_LS} 1001/o+rx/dir1"
 run "${GUFI_LS} 1001/o+rx/dir2"
@@ -244,12 +245,6 @@ run "${GUFI_STATS} -r dircount"
 
 run "${GUFI_STATS}    total-dircount"
 run "${GUFI_STATS} -c total-dircount"
-
-run "${GUFI_STATS}    files-per-level"
-run "${GUFI_STATS} -c files-per-level"
-
-run "${GUFI_STATS}    dirs-per-level"
-run "${GUFI_STATS} -c dirs-per-level"
 ) 2>&1 | tee "${OUTPUT}"
 
 diff ${ROOT}/test/regression/rollup.expected "${OUTPUT}"
