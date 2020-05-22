@@ -79,7 +79,7 @@ extern int errno;
 
 struct Unrollup {
     char name[MAXPATH];
-    int rolledup;
+    int rolledup; /* set by parent, can be modified by self */
 };
 
 int get_rolled_up(void * args, int count, char ** data, char ** columns) {
@@ -103,38 +103,42 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         goto free_work;
     }
 
+    int rolledup = 0;
+
     char dbname[MAXPATH];
     SNPRINTF(dbname, MAXPATH, "%s/" DBNAME, work->name);
     sqlite3 * db = opendb(dbname, SQLITE_OPEN_READWRITE, 0, 0
-                         , NULL, NULL
-#if defined(DEBUG) && defined(PER_THREAD_STATS)
-                         , NULL, NULL
-                         , NULL, NULL
-#endif
+                , NULL, NULL
+                #if defined(DEBUG) && defined(PER_THREAD_STATS)
+                , NULL, NULL
+                , NULL, NULL
+                #endif
         );
 
     if (!db) {
         rc = 1;
-        goto close_dir;
     }
 
-    // check if should reset pentries
-    int rolledup = work->rolledup;
-    if (!work->rolledup) {
+    /* get roll up status set by parent */
+    rolledup = work->rolledup;
+
+    /* even if the parent was not rolled up, this directory might be */
+    /* directories known to be rolled up can skip this check */
+    if (db && !work->rolledup) {
+        /* get whether or not the current directory was rolled up */
         if (sqlite3_exec(db, "SELECT (rollupscore <> 0) FROM summary WHERE isroot == 1", get_rolled_up, &rolledup, &err) != SQLITE_OK) {
             fprintf(stderr, "Error: Failed to get rollup score from \"%s\": %s\n", work->name, err);
             rc = 1;
-            goto free_err;
         }
-
-        if (sqlite3_exec(db, "UPDATE summary SET rollupscore = 0 WHERE isroot == 1", NULL, NULL, &err) != SQLITE_OK) {
-            fprintf(stderr, "Error: Failed to reset rollup score of \"%s\": %s\n", work->name, err);
-            rc = 1;
-            goto free_err;
-        }
+        sqlite3_free(err);
+        err = NULL;
     }
 
     /* always descend */
+    /* if not rolled up, children might be */
+    /* if rolled up, all child also need processing */
+    /**/
+    /* descend first to keep working while cleaning up db */
     struct dirent * entry = NULL;
     while ((entry = readdir(dir))) {
         if ((strncmp(entry->d_name, ".",  2) == 0) ||
@@ -150,6 +154,9 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
             if (S_ISDIR(st.st_mode)) {
                 struct Unrollup * subdir = malloc(sizeof(struct Unrollup));
                 memcpy(subdir->name, name, len + 1);
+
+                /* set child rolledup status so that if this dir */
+                /* was rolled up, child can skip roll up check */
                 subdir->rolledup = rolledup;
 
                 QPTPool_enqueue(ctx, id, processdir, subdir);
@@ -157,29 +164,27 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         }
     }
 
-  close_dir:
-    closedir(dir);
-
-    if (rolledup) {
+    /* now that work has been pushed onto the queue, clean up this db */
+    if (db && rolledup) {
         if (sqlite3_exec(db,
                          "BEGIN TRANSACTION;"
                          "DROP TABLE pentries;"
                          "CREATE VIEW pentries AS SELECT entries.*, summary.inode AS pinode FROM entries, summary WHERE rectype = 0;"
                          "DELETE FROM summary WHERE isroot <> 1;"
+                         "UPDATE summary SET rollupscore = 0 WHERE isroot == 1;"
                          "END TRANSACTION;",
                          NULL,
                          NULL,
                          &err) != SQLITE_OK) {
             fprintf(stderr, "Could not remove roll up data from \"%s\": %s\n", work->name, err);
             rc = 1;
-            goto free_err;
         }
+        sqlite3_free(err);
+        err = NULL;
     }
 
-  free_err:
-    sqlite3_free(err);
-
     closedb(db);
+    closedir(dir);
 
   free_work:
     free(work);
@@ -234,10 +239,13 @@ int main(int argc, char * argv[]) {
             len = 1;
         }
 
-        struct Unrollup * mywork = calloc(1, sizeof(struct Unrollup));
+        struct Unrollup * mywork = malloc(sizeof(struct Unrollup));
 
         /* copy argv[i] into the work item */
         SNFORMAT_S(mywork->name, MAXPATH, 1, argv[i], len);
+
+        /* assume index root was not rolled up */
+        mywork->rolledup = 0;
 
         struct stat st;
         lstat(mywork->name, &st);

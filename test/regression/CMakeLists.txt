@@ -105,6 +105,7 @@ endif()
 # tests are not added since sudo is required
 set(SUDO
   rollup
+  unrollup
 )
 
 foreach(NAME ${CORE})
