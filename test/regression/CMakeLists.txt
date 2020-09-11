@@ -70,23 +70,7 @@ set(CORE
 )
 
 # .sh and .expected
-set(CONTRIB)
-if (CMAKE_CXX_COMPILER)
-  list(APPEND CONTRIB
-    verifytrace
-    verifytraceintree
-  )
-endif()
-
-# .sh, .py, and .expected
-set(SCRIPTS
-  gufi_find
-  gufi_ls
-  gufi_stats
-)
-
-# .sh and .expected
-set(SRC
+set(SH_AND_EXPECTED
   completions
   gufi_dir2index
   gufi_dir2trace
@@ -96,8 +80,22 @@ set(SRC
   querydbn
 )
 
+# .sh, .py, and .expected
+set(SH_PY_AND_EXPECTED
+  gufi_find
+  gufi_ls
+  gufi_stats
+)
+
+if (CMAKE_CXX_COMPILER)
+  list(APPEND SH_AND_EXPECTED
+    verifytrace
+    verifytraceintree
+  )
+endif()
+
 if (NOT APPLE)
-  list(APPEND SRC
+  list(APPEND SH_AND_EXPECTED
     gufi_stat)
 endif()
 
@@ -112,21 +110,21 @@ foreach(NAME ${CORE})
   configure_file(${NAME} ${NAME} COPYONLY)
 endforeach()
 
-foreach(NAME ${CONTRIB} ${SRC})
+foreach(NAME ${SH_AND_EXPECTED})
   configure_file("${NAME}.sh"       "${NAME}.sh"       COPYONLY)
   configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
 
-  add_test(NAME ${NAME} COMMAND "${NAME}.sh")
-  set_tests_properties(${NAME} PROPERTIES LABELS regression)
+  add_test(NAME "${NAME}" COMMAND "${NAME}.sh")
+  set_tests_properties("${NAME}" PROPERTIES LABELS regression)
 endforeach()
 
-foreach(NAME ${SCRIPTS})
+foreach(NAME ${SH_PY_AND_EXPECTED})
   configure_file("${NAME}.sh"       "${NAME}.sh"       COPYONLY)
   configure_file("${NAME}.py"       "${NAME}.py"       COPYONLY)
   configure_file("${NAME}.expected" "${NAME}.expected" COPYONLY)
 
-  add_test(NAME ${NAME} COMMAND "${NAME}.sh")
-  set_tests_properties(${NAME} PROPERTIES LABELS regression)
+  add_test(NAME "${NAME}" COMMAND "${NAME}.sh")
+  set_tests_properties("${NAME}" PROPERTIES LABELS regression)
 endforeach()
 
 foreach(NAME ${SUDO})
