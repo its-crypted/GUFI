@@ -97,7 +97,7 @@ struct start_end * buffer_create(struct sll * timers) {
     return timer;
 }
 
-/* descend timer types*/
+/* descend timer types */
 enum {
     dt_within_descend = 0,
     dt_check_args,
@@ -121,31 +121,26 @@ enum {
 };
 
 struct sll * descend_timers_init() {
-    #ifdef DEBUG
     struct sll * dt = malloc(dt_max * sizeof(struct sll));
     for(int i = 0; i < dt_max; i++) {
         sll_init(&dt[i]);
     }
 
     return dt;
-    #endif
-    return NULL;
 }
 
 void descend_timers_destroy(struct sll * dt) {
-    #ifdef DEBUG
     for(int i = 0; i < dt_max; i++) {
         sll_destroy(&dt[i], free);
     }
     free(dt);
-    #endif
 }
 
 #define buffered_name(name) (dt_##name)
-#define buffered_get(name)  timers[buffered_name(name)]
+#define buffered_get(timers, name)  timers[buffered_name(name)]
 
-#define buffered_start(name)                                       \
-    struct start_end * name = buffer_create(&buffered_get(name));  \
+#define buffered_start(name)                                              \
+    struct start_end * name = buffer_create(&buffered_get(timers, name)); \
     timestamp_set_start_raw((*(name)));
 
 #define buffered_end(name) timestamp_set_end_raw((*(name)));
@@ -153,7 +148,7 @@ void descend_timers_destroy(struct sll * dt) {
 #ifdef PER_THREAD_STATS
 
 #define print_descend_timers(obufs, id, name, timers, type)              \
-    sll_loop(&timers[buffered_name(type)], node) {                       \
+    sll_loop(&buffered_get(timers, type), node) {                        \
         struct start_end * timestamp = sll_node_data(node);              \
         print_timer(obufs, id, ts_buf, sizeof(ts_buf), name, timestamp); \
     }
@@ -167,6 +162,7 @@ long double total_open_time = 0;
 long double total_sqlite3_open_time = 0;
 long double total_set_pragmas_time = 0;
 long double total_load_extension_time = 0;
+long double total_create_tables_time = 0;
 long double total_addqueryfuncs_time = 0;
 long double total_descend_time = 0;
 long double total_check_args_time = 0;
@@ -217,7 +213,8 @@ long double buffer_sum(struct sll * timers) {
 
 #endif
 #else
-#define debug_start(name)
+struct sll * descend_timers_init() {}
+void descend_timers_destroy(struct sll * dt) {}
 #define buffered_start(name)
 #define buffered_end(name)
 #endif

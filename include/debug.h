@@ -172,7 +172,7 @@ int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const
 
 #else
 
-#define timestamp_init(obs, count, capacity)
+#define timestamp_init(obs, count, capacity, mutex_ptr)
 #define timestamp_get_name(name)
 #define timestamp_set_start(name)
 #define timestamp_start(name)
@@ -183,7 +183,7 @@ int print_timer(struct OutputBuffers * obufs, const size_t id, char * str, const
 #define timestamp_print(obs, id, str, name)
 #define timestamp_end(obs, id, str, name)
 #define timestamp_elapsed(name)
-#define timestamp_destroy(obs, count)
+#define timestamp_destroy(obs)
 
 #endif
 
