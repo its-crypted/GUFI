@@ -8,11 +8,11 @@ TARGETS=$(addprefix run, $(TESTS))
 
 .PHONY: $(TESTS)
 
-all: $(TARGETS)
+all: run
 
 run%: %.sh ../../contrib/output-on-failure
 	@echo "Running Test: $<"
-	@../../contrib/output-on-failure ./$^
+	@../../contrib/output-on-failure ./$<
 
 run: $(TARGETS)
 

@@ -18,9 +18,9 @@ all: $(TARGET)
 $(TARGET): $(OBJ) $(realpath ../../../src)/libGUFI.a $(STATIC_DEPS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run: $(TARGET) ../../contrib/output-on-failure
+run: $(TARGET) ../../../contrib/output-on-failure
 	@echo "Running Test: unit_tests"
-	@../../contrib/output-on-failure ./$(TARGET)
+	@../../../contrib/output-on-failure ./$(TARGET)
 
 clean:
 	rm -rf $(OBJ) $(TARGET)
