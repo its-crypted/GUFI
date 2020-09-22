@@ -77,8 +77,8 @@ set(REGRESSION_TEST_FILES
     gufi_query.expected
     gufi_query.sh
 
-    querydbn.expected
-    querydbn.sh
+    querydbs.expected
+    querydbs.sh
 
     generatetree
     setup.sh
