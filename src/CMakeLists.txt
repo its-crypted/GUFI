@@ -186,7 +186,6 @@ set(C_SOURCES
   gufi_trace2index.c
   gufi_query.c
   gufi_stat.c
-  querydb.c
   querydbn.c
 )
 
