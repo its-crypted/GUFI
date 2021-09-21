@@ -341,7 +341,6 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
                 #ifdef CUMULATIVE_TIMES
                 thread_startdb += timestamp_elapsed(startdb);
                 thread_stopdb  += timestamp_elapsed(stopdb);
-                thread_files   += row_count;
                 #endif
                 #endif
 
