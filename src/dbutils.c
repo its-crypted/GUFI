@@ -633,17 +633,17 @@ int insertsumdb(sqlite3 *sdb, struct work *pwork,struct sum *su)
 
     SNPRINTF(sqlstmt,MAXSQL,"INSERT INTO summary VALUES "
             "(NULL, \'%s\', \'%s\', "
-            "%"STAT_ino", %d, %"STAT_nlink", %d, %d, %"STAT_size", %"STAT_bsize", %"STAT_blocks", %ld, %ld, %ld, "
+            "%"STAT_ino", %d, %"STAT_nlink", %" PRId64 ", %" PRId64 ", %"STAT_size", %"STAT_bsize", %"STAT_blocks", %ld, %ld, %ld, "
             "\'%s\', \'%s\', "
-            "%lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %d, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %d, %lld, 1, 0);",
+            "%lld, %lld, %" PRId64  ", %" PRId64 ", %" PRId64 ", %" PRId64 ", %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %d, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %lld, %d, %lld, 1, 0);",
             zname,
             ztype,
 
             pwork->statuso.st_ino,      // STAT_ino
             pwork->statuso.st_mode,
             pwork->statuso.st_nlink,    // STAT_nlink
-            pwork->statuso.st_uid,
-            pwork->statuso.st_gid,
+            (int64_t) pwork->statuso.st_uid,
+            (int64_t) pwork->statuso.st_gid,
             pwork->statuso.st_size,     // STAT_size
             pwork->statuso.st_blksize,  // STAT_bsize
             pwork->statuso.st_blocks,   // STAT_blocks
@@ -656,10 +656,10 @@ int insertsumdb(sqlite3 *sdb, struct work *pwork,struct sum *su)
 
             su->totfiles,
             su->totlinks,
-            su->minuid,
-            su->maxuid,
-            su->mingid,
-            su->maxgid,
+            (int64_t) su->minuid,
+            (int64_t) su->maxuid,
+            (int64_t) su->mingid,
+            (int64_t) su->maxgid,
             su->minsize,
             su->maxsize,
             su->totltk,
@@ -788,7 +788,7 @@ static void path(sqlite3_context *context, int argc, sqlite3_value **argv)
 
     /* join path segments, removing duplicate at join point */
     char final_path[MAXPATH];
-    SNFORMAT_S(final_path, MAXPATH, 2, gps[id].gpath, strlen(gps[id].gpath), s,strlen(s));
+    SNFORMAT_S(final_path, MAXPATH, 2, gps[id].gpath, strlen(gps[id].gpath), s, strlen(s));
 
     sqlite3_result_text(context, final_path, -1, SQLITE_TRANSIENT);
 
