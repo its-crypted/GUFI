@@ -219,8 +219,6 @@ void descend_timers_destroy(struct sll * dt) {}
 #define buffered_end(name)
 #endif
 
-int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args);
-
 /* Push the subdirectories in the current directory onto the queue */
 static size_t descend2(struct QPTPool *ctx,
                        const size_t id,
@@ -331,7 +329,7 @@ static size_t descend2(struct QPTPool *ctx,
 
                     /* push the subdirectory into the queue for processing */
                     buffered_start(pushdir);
-                    QPTPool_enqueue(ctx, id, processdir, clone);
+                    QPTPool_enqueue(ctx, id, func, clone);
                     buffered_end(pushdir);
 
                     pushed++;
