@@ -114,7 +114,7 @@ OUTPUT="gufi_dir2index.out"
     echo "    GUFI Index:"
     echo "${index}" | awk '{ printf "        " $0 "\n" }'
     echo
-) 2>&1 | tee "${OUTPUT}"
+) | tee "${OUTPUT}"
 
 # index up to different levels of the tree
 for level in 0 1 2
@@ -141,7 +141,7 @@ do
         echo "    GUFI Index:"
         echo "${index}" | awk '{ printf "        " $0 "\n" }'
         echo
-    ) 2>&1 | tee -a "${OUTPUT}"
+    ) | tee -a "${OUTPUT}"
 done
 
 diff ${ROOT}/test/regression/gufi_dir2index.expected "${OUTPUT}"

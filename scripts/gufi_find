@@ -205,7 +205,7 @@ def build_where(args, table, root_uid = 0, root_gid = 0):
         where += ['({} - {}.mtime) / 60 {} {}'.format(now, table, mmin[0], mmin[1]) for mmin in args.mmin]
 
     if args.mtime is not None:
-        where += ['({} - mtime) / {} {} {}'.format(now, SECONDS_PER_DAY, mtime[0], mtime[1]) for mtime in args.mtime
+        where += ['({} - mtime) / {} {} {}'.format(now, SECONDS_PER_DAY, mtime[0], mtime[1]) for mtime in args.mtime]
 
     if args.name is not None:
         where += [' OR '.join(['({}.name REGEXP \'{}\')'.format(table, name) for name in args.name])]
@@ -232,7 +232,7 @@ def build_where(args, table, root_uid = 0, root_gid = 0):
         where += ['{}.inode == {}'.format(name, args.samefile.st_ino)]
 
     if args.size is not None:
-        where += ['size {} {}'.format(size[0], size[1]) for size in args.size]
+        where += ['{}.size {} {}'.format(table, size[0], size[1]) for size in args.size]
 
     if args.true == True:
         where += ['1']
@@ -667,10 +667,8 @@ def run(argv, config_path):
 
     query_cmd += ['-S', S,
                   '-E', E,
-                  '-a']
-
-    if args.delim:
-        query_cmd += ['-d', args.delim]
+                  '-a',
+                  '-d', ' ']
 
     if args.maxdepth is not None:
         query_cmd += ['-z', str(args.maxdepth)]

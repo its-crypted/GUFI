@@ -106,7 +106,7 @@ output=$(${QUERYDBN} -NV outdb "${TABLE}" "SELECT name, size FROM v${TABLE} ORDE
 replace "${output}"
 echo
 
-) 2>&1 | tee "${OUTPUT}"
+) | tee "${OUTPUT}"
 
 diff ${ROOT}/test/regression/querydbn.expected "${OUTPUT}"
 rm "${OUTPUT}"

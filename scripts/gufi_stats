@@ -958,7 +958,7 @@ def duplicate_names(config, args, where):
 
         '-S',
         'INSERT INTO {} {}'.format(args.inmemory_name,
-                                   gufi_common.build_query(['NULL', 'path()'] +
+                                   gufi_common.build_query(['NULL', 'path(name)'] +
                                                            columns,
                                                            ['summary'],
                                                            where,
@@ -969,7 +969,7 @@ def duplicate_names(config, args, where):
 
         '-E',
         'INSERT INTO {} {}'.format(args.inmemory_name,
-                                   gufi_common.build_query(['NULL', 'path()'] +
+                                   gufi_common.build_query(['NULL', 'path(name)'] +
                                                            columns,
                                                            ['entries'],
                                                            where,

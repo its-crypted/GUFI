@@ -117,7 +117,7 @@ run_sorted   "${GUFI_FIND} -type f -size +1 -size=-3" # 512 < size < 1536
 run_sorted   "${GUFI_FIND} -type f -size 2048"        # 512 * 2048 = 1MB
 run_unsorted "${GUFI_FIND} -type f --smallest"
 run_unsorted "${GUFI_FIND} -type f --largest"
-) 2>&1 | tee "${OUTPUT}"
+) | tee "${OUTPUT}"
 
 diff ${ROOT}/test/regression/gufi_find.expected "${OUTPUT}"
 rm "${OUTPUT}"

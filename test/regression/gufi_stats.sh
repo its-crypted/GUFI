@@ -152,8 +152,7 @@ then
 
     user "${GUFI_STATS}    median-leaf-files"
 fi
-
-) 2>&1 | tee "${OUTPUT}"
+) | tee "${OUTPUT}"
 
 EXPECTED="${ROOT}/test/regression/gufi_stats.expected"
 COPY="${EXPECTED}.copy"
