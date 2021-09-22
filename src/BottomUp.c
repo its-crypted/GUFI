@@ -275,6 +275,9 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
     bu->refs.remaining = bu->subdir_count;
     if (bu->subdir_count) {
         timestamp_start(enqueue_subdirs);
+        /* have to lock to prevent subdirs from getting popped */
+        /* off before all of them have been enqueued */
+        pthread_mutex_lock(&bu->refs.mutex);
         sll_loop(&bu->subdirs, node)  {
             struct BottomUp *child = (struct BottomUp *) sll_node_data(node);
             child->parent = bu;
@@ -285,7 +288,8 @@ int descend_to_bottom(struct QPTPool * ctx, const size_t id, void * data, void *
             QPTPool_enqueue(ctx, id, descend_to_bottom, child);
             timestamp_end(ua->timestamp_buffers, id, "enqueue_subdir", enqueue_subdir);
         }
-            timestamp_end(ua->timestamp_buffers, id, "enqueue_subdirs", enqueue_subdirs);
+        pthread_mutex_unlock(&bu->refs.mutex);
+        timestamp_end(ua->timestamp_buffers, id, "enqueue_subdirs", enqueue_subdirs);
     }
     else {
         /* start working upwards */
