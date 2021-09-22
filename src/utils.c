@@ -605,13 +605,13 @@ int SNPRINTF(char * str, size_t size, const char *format, ...) {
     const int n = vsnprintf(str, size, format, args);
     va_end(args);
     if (n < 0) {
-        fprintf(stderr, "%s:%d Error printing\n",
-                __FILE__, __LINE__);
+        fprintf(stderr, "%s:%d Error printing %s\n",
+                __FILE__, __LINE__, format);
     }
     if ((size_t) n >= size) {
         fprintf(stderr, "%s:%d Warning: Message "
-                "was truncated to %d characters\n",
-                __FILE__, __LINE__, n);
+                "was truncated to %d characters: %s\n",
+                __FILE__, __LINE__, n, str);
     }
     return n;
 }
