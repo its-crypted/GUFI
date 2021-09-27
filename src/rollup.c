@@ -90,8 +90,10 @@ struct DirStats {
     size_t subdir_count;    /* unrolled up count from readdir, not summary */
     size_t subnondir_count; /* rolled up count from entries and subdir.pentries */
 
-    int    score;           /* roll up score regardless of success or failure */
-    int    success;         /* whether or not the roll up succeeded */
+    int too_many_before;    /* current directory is too big to roll up */
+    int too_many_after;     /* rolling up would result in too many rows in pentries */
+    int score;              /* roll up score regardless of success or failure */
+    int success;            /* whether or not the roll up succeeded */
 };
 
 /* per thread stats */
@@ -112,58 +114,109 @@ int compare_size_t(const void * lhs, const void * rhs) {
     return (*(size_t *) lhs - *(size_t *) rhs);
 }
 
-#define sll_dir_stats(name, all, var, threads, width)                   \
-do {                                                                    \
-    const size_t count = sll_get_size(all);                             \
-    if (count == 0) {                                                   \
-        break;                                                          \
-    }                                                                   \
-                                                                        \
-    size_t * array = malloc(count * sizeof(size_t));                    \
-    size_t min = (size_t) -1;                                           \
-    size_t max = 0;                                                     \
-    size_t sum = 0;                                                     \
-    size_t i = 0;                                                       \
-    sll_loop(all, node) {                                               \
-        struct DirStats * ds = (struct DirStats *) sll_node_data(node); \
-        if (ds->var < min) {                                            \
-            min = ds->var;                                              \
-        }                                                               \
-                                                                        \
-        if (ds->var > max) {                                            \
-            max = ds->var;                                              \
-        }                                                               \
-                                                                        \
-        sum += ds->var;                                                 \
-        array[i++] = ds->var;                                           \
-    }                                                                   \
-                                                                        \
-    qsort(array, count, sizeof(size_t), compare_size_t);                \
-    const size_t half = count / 2;                                      \
-    double median = array[half];                                        \
-    if (count % 2 == 0) {                                               \
-        median += array[half - 1];                                      \
-        median /= 2;                                                    \
-    }                                                                   \
-                                                                        \
-    const double avg = ((double) sum) / count;                          \
-                                                                        \
-    fprintf(stderr, "    %s:\n", name);                                 \
-    fprintf(stderr, "        min:        %" #width "zu\n",  min);       \
-    fprintf(stderr, "        max:        %" #width "zu\n",  max);       \
-    fprintf(stderr, "        median:     %" #width ".2f\n", median);    \
-    fprintf(stderr, "        sum:        %" #width "zu\n",  sum);       \
-    fprintf(stderr, "        average:    %" #width ".2f\n", avg);       \
-                                                                        \
-    free(array);                                                        \
+#define sll_dir_stats(name, all, var, width)                             \
+do {                                                                     \
+    const size_t count = sll_get_size(all);                              \
+    if (count == 0) {                                                    \
+        break;                                                           \
+    }                                                                    \
+                                                                         \
+    size_t * array = malloc(count * sizeof(size_t));                     \
+    size_t min = (size_t) -1;                                            \
+    size_t max = 0;                                                      \
+    size_t sum = 0;                                                      \
+    size_t i = 0;                                                        \
+    sll_loop(all, node) {                                                \
+        struct DirStats * ds = (struct DirStats *) sll_node_data(node);  \
+        if (ds->var < min) {                                             \
+            min = ds->var;                                               \
+        }                                                                \
+                                                                         \
+        if (ds->var > max) {                                             \
+            max = ds->var;                                               \
+        }                                                                \
+                                                                         \
+        sum += ds->var;                                                  \
+        array[i++] = ds->var;                                            \
+    }                                                                    \
+                                                                         \
+    qsort(array, count, sizeof(size_t), compare_size_t);                 \
+    const size_t half = count / 2;                                       \
+    double median = array[half];                                         \
+    if (count % 2 == 0) {                                                \
+        median += array[half - 1];                                       \
+        median /= 2;                                                     \
+    }                                                                    \
+                                                                         \
+    const double avg = ((double) sum) / count;                           \
+                                                                         \
+    fprintf(stderr, "    %s:\n", name);                                  \
+    fprintf(stderr, "        min:        %" #width "zu\n",  min);        \
+    fprintf(stderr, "        max:        %" #width "zu\n",  max);        \
+    fprintf(stderr, "        median:     %" #width ".2f\n", median);     \
+    fprintf(stderr, "        sum:        %" #width "zu\n",  sum);        \
+    fprintf(stderr, "        average:    %" #width ".2f\n", avg);        \
+                                                                         \
+    free(array);                                                         \
 } while (0)
 
-void print_stanza(const char * name, struct sll * stats, const size_t threads) {
-    fprintf(stderr, "%s %*zu\n", name, (int) (29 - strlen(name)), sll_get_size(stats));
-    sll_dir_stats("Subdirectories", stats, subdir_count,    threads, 10);
-    sll_dir_stats("Files/Links",    stats, subnondir_count, threads, 10);
-    sll_dir_stats("Level",          stats, level,           threads, 10);
-    fprintf(stderr, "\n");
+#define print_too_many(name, all, var, width)                            \
+do {                                                                     \
+    const size_t count = sll_get_size(all);                              \
+    if (count == 0) {                                                    \
+        break;                                                           \
+    }                                                                    \
+                                                                         \
+    size_t * array = malloc(count * sizeof(size_t));                     \
+    size_t min = (size_t) -1;                                            \
+    size_t max = 0;                                                      \
+    size_t sum = 0;                                                      \
+    size_t i = 0;                                                        \
+    sll_loop(all, node) {                                                \
+        struct DirStats * ds = (struct DirStats *) sll_node_data(node);  \
+        if (ds->var == 0) {                                              \
+            continue;                                                    \
+        }                                                                \
+                                                                         \
+        if (ds->var < min) {                                             \
+            min = ds->var;                                               \
+        }                                                                \
+                                                                         \
+        if (ds->var > max) {                                             \
+            max = ds->var;                                               \
+        }                                                                \
+                                                                         \
+        sum += ds->var;                                                  \
+        array[i++] = ds->var;                                            \
+    }                                                                    \
+                                                                         \
+    fprintf(stderr, "    %s %14zu\n", name, i);                          \
+    if (i) {                                                             \
+        qsort(array, i, sizeof(size_t), compare_size_t);                 \
+        const size_t half = i / 2;                                       \
+        double median = array[half];                                     \
+        if (i % 2 == 0) {                                                \
+            median += array[half - 1];                                   \
+            median /= 2;                                                 \
+        }                                                                \
+                                                                         \
+        const double avg = ((double) sum) / i;                           \
+                                                                         \
+        fprintf(stderr, "        min:        %" #width "zu\n",  min);    \
+        fprintf(stderr, "        max:        %" #width "zu\n",  max);    \
+        fprintf(stderr, "        median:     %" #width ".2f\n", median); \
+        fprintf(stderr, "        sum:        %" #width "zu\n",  sum);    \
+        fprintf(stderr, "        average:    %" #width ".2f\n", avg);    \
+    }                                                                    \
+                                                                         \
+    free(array);                                                         \
+} while (0)
+
+void print_stanza(const char * name, struct sll * stats) {
+    fprintf(stderr, "%s %*zu\n", name, (int) (34 - strlen(name)), sll_get_size(stats));
+    sll_dir_stats("Subdirectories", stats, subdir_count,    15);
+    sll_dir_stats("Files/Links",    stats, subnondir_count, 15);
+    sll_dir_stats("Level",          stats, level,           15);
 }
 
 /* this function moves the sll stats up and deallocates them */
@@ -173,8 +226,8 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
         fprintf(stderr, "    %s\n", paths[i]);
     }
     fprintf(stderr, "\n");
-    fprintf(stderr, "Thread Pool Size: %12d\n",  in.maxthreads);
-    fprintf(stderr, "Files/Links Limit: %11zu\n", in.max_in_dir);
+    fprintf(stderr, "Thread Pool Size: %17d\n",  in.maxthreads);
+    fprintf(stderr, "Files/Links Limit: %16zu\n", in.max_in_dir);
     fprintf(stderr, "\n");
 
     /* per-thread stats together */
@@ -195,11 +248,6 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
         sll_move_append(&rolled_up,     &stats[i].rolled_up);
         remaining += stats[i].remaining;
     }
-
-    /* print stats of each type of directory */
-    print_stanza("Not Processed:",  &not_processed, threads);
-    print_stanza("Cannot Roll Up:", &not_rolled_up, threads);
-    print_stanza("Can Roll Up:",    &rolled_up,     threads);
 
     /* get distribution of roll up scores */
     size_t successful = 0;
@@ -248,8 +296,14 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
                               sll_get_size(&not_rolled_up) +
                               sll_get_size(&rolled_up);
 
-    fprintf(stderr, "    Successful: %14zu\n", successful);
-    fprintf(stderr, "    Failed:     %14zu\n", failed);
+    /* print stats of each type of directory */
+    print_stanza("Not Processed:",   &not_processed);
+    print_stanza("Cannot Roll Up:",  &not_rolled_up);
+    print_too_many("Too Many Before:", &not_rolled_up, too_many_before, 15);
+    print_too_many("Too Many After: ", &not_rolled_up, too_many_after,  15);
+    print_stanza("Can Roll Up:",     &rolled_up);
+    fprintf(stderr, "    Successful: %19zu\n", successful);
+    fprintf(stderr, "    Failed:     %19zu\n", failed);
     fprintf(stderr, "Files/Links:    %zu\n", total_nondirs);
     fprintf(stderr, "Directories:    %zu (%zu empty)\n", total_dirs, empty);
     fprintf(stderr, "Total:          %zu\n", total_nondirs + total_dirs);
@@ -268,7 +322,11 @@ struct RollUp {
 
 /* ************************************** */
 /* get permissions from directory entries */
-const char PERM_SQL[] = "SELECT mode, uid, gid FROM summary WHERE isroot == 1";
+const char PERM_SQL[] = "SELECT " \
+    "(SELECT mode FROM summary WHERE isroot == 1), " \
+    "(SELECT uid  FROM summary WHERE isroot == 1), " \
+    "(SELECT gid  FROM summary WHERE isroot == 1), " \
+    "(SELECT COUNT(*) FROM pentries)";
 
 struct Permissions {
     mode_t mode;
@@ -277,17 +335,45 @@ struct Permissions {
 };
 
 int get_permissions(void * args, int count, char ** data, char ** columns) {
-    if (count != 3) {
-        return 1;
-    }
-
     struct Permissions * perms = (struct Permissions *) args;
-
     perms->mode = atoi(data[0]);
     perms->uid  = atoi(data[1]);
     perms->gid  = atoi(data[2]);
-
     return 0;
+}
+
+struct ChildData {
+    struct Permissions * perms;
+    size_t count;
+};
+
+int get_permissions_and_count(void * args, int count, char ** data, char ** columns) {
+    struct ChildData * child = (struct ChildData *) args;
+    get_permissions(child->perms, count, data, columns);
+    child->count = atoi(data[3]);
+    return 0;
+}
+
+int add_entries_count(void * args, int count, char ** data, char ** columns) {
+    size_t * total = (size_t *) args;
+    size_t rows = 0;
+    if (sscanf(data[0], "%zu", &rows) != 1) {
+        return 1;
+    }
+    *total += rows;
+    return 0;
+}
+
+/* get number of non-dirs in this directory from the pentries table */
+int get_nondirs(const char * name, sqlite3 * dst, size_t *subnondir_count) {
+    char * err = NULL;
+    const int exec_rc = sqlite3_exec(dst, "SELECT COUNT(*) FROM pentries",
+                                     add_entries_count, subnondir_count, &err);
+    if (exec_rc != SQLITE_OK) {
+        fprintf(stderr, "Warning: Failed to get entries row count from \"%s\": %s\n", name, err);
+    }
+    sqlite3_free(err);
+    return exec_rc;
 }
 
 /*
@@ -295,18 +381,21 @@ int get_permissions(void * args, int count, char ** data, char ** columns) {
          0 - do not roll up
          1 - all permissions match
 */
-int check_permissions(struct Permissions * curr, const size_t child_count, struct sll * child_list, const size_t id timestamp_sig) {
+int check_children(struct RollUp * rollup, struct Permissions * curr,
+                   const size_t child_count, size_t *total_child_entries
+                   timestamp_sig) {
     if (child_count == 0) {
         return 1;
     }
 
     timestamp_create_buffer(4096);
 
-    struct Permissions * child_perms = malloc(sizeof(struct Permissions) * sll_get_size(child_list));
+    struct Permissions * child_perms =
+        malloc(sizeof(struct Permissions) * sll_get_size(&rollup->data.subdirs));
 
     /* get permissions of each child */
     size_t idx = 0;
-    sll_loop(child_list, node) {
+    sll_loop(&rollup->data.subdirs, node) {
         struct RollUp * child = (struct RollUp *) sll_node_data(node);
 
         char dbname[MAXPATH] = {0};
@@ -320,23 +409,26 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
                               , NULL, NULL
                               #endif
             );
-        timestamp_end(timestamp_buffers, id, "open_child_db", open_child_db);
+        timestamp_end(timestamp_buffers, rollup->data.tid.up, "open_child_db", open_child_db);
 
         if (!db) {
             break;
         }
 
-        /* get the child directory's permissions */
-        timestamp_start(get_child_perms);
+        /* get the child directory's permissions and pentries count */
+        timestamp_start(get_child_data);
+        struct ChildData data;
+        data.perms = &child_perms[idx];
+        data.count = 0;
         char * err = NULL;
-        const int exec_rc = sqlite3_exec(db, PERM_SQL, get_permissions, &child_perms[idx], &err);
-        timestamp_end(timestamp_buffers, id, "get_child_perms", get_child_perms);
+        const int rc = sqlite3_exec(db, PERM_SQL, get_permissions_and_count, &data, &err);
+        timestamp_end(timestamp_buffers, rollup->data.tid.up, "get_child_data", get_child_data);
 
         timestamp_start(close_child_db);
         closedb(db);
-        timestamp_end(timestamp_buffers, id, "close_child_db", close_child_db);
+        timestamp_end(timestamp_buffers, rollup->data.tid.up, "close_child_db", close_child_db);
 
-        if (exec_rc != SQLITE_OK) {
+        if (rc != SQLITE_OK) {
             fprintf(stderr, "Error: Could not get permissions of child directory \"%s\": %s\n", child->data.name, err);
 
             sqlite3_free(err);
@@ -345,9 +437,13 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
 
         sqlite3_free(err);
 
+        /* rolled up size is checked by caller */
+        *total_child_entries += data.count;
+
         idx++;
     }
 
+    /* not every child has good permission */
     if (child_count != idx) {
         free(child_perms);
         return -1;
@@ -407,8 +503,15 @@ int can_rollup(struct RollUp * rollup,
     /* default to cannot roll up */
     int legal = 0;
 
-    /* if a directory has too many immediate files/links, don't roll up */
-    if (ds->subnondir_count >= in.max_in_dir) {
+    /* get count of number of non-directories in the current directory */
+    timestamp_start(nondir_count);
+    ds->subnondir_count = 0;
+    get_nondirs(rollup->data.name, dst, &ds->subnondir_count);
+    timestamp_end(timestamp_buffers, rollup->data.tid.up, "nondir_count", nondir_count);
+
+    /* the current directory has too many immediate files/links, don't roll up */
+    if (ds->subnondir_count > in.max_in_dir) {
+        ds->too_many_before = ds->subnondir_count;
         goto end_can_rollup;
     }
 
@@ -425,7 +528,7 @@ int can_rollup(struct RollUp * rollup,
     }
     timestamp_end(timestamp_buffers, rollup->data.tid.up, "check_subdirs_rolledup", check_subdirs_rolledup);
 
-    /* not all children were rolled up, so cannot roll up */
+    /* quick check to see if all chilren were rolled up */
     if (total_subdirs != rolledup) {
         goto end_can_rollup;
     }
@@ -444,8 +547,20 @@ int can_rollup(struct RollUp * rollup,
 
     /* check if the permissions of this directory and its children match */
     timestamp_start(check_perms);
-    legal = check_permissions(&perms, total_subdirs, &rollup->data.subdirs, rollup->data.tid.up timestamp_args);
+    size_t total_child_entries = 0;
+    legal = check_children(rollup, &perms, total_subdirs, &total_child_entries timestamp_args);
     timestamp_end(timestamp_buffers, rollup->data.tid.up, "check_perms", check_perms);
+
+    /*
+     * even if this directory can be rolled up, don't
+     * let it if doing so would result in too many
+     * rows in pentries
+     */
+    const size_t total_pentries = ds->subnondir_count + total_child_entries;
+    if (total_pentries > in.max_in_dir) {
+        ds->too_many_after = total_pentries;
+        legal = 0;
+    }
 
 end_can_rollup:
     sqlite3_free(err);
@@ -453,12 +568,6 @@ end_can_rollup:
     timestamp_end(timestamp_buffers, rollup->data.tid.up, "can_rollup", can_roll_up);
 
     return legal;
-}
-
-int add_entries_count(void * args, int count, char ** data, char ** columns) {
-    size_t * rows = (size_t *) args;
-    *rows += atoi(data[0]);
-    return 0;
 }
 
 /* drop pentries view */
@@ -478,18 +587,6 @@ static const size_t rollup_score_offset = sizeof(ROLLUP_CURRENT_DIR) - sizeof("0
 static const char rollup_subdir[] =
     "INSERT INTO pentries SELECT * FROM " SUBDIR_ATTACH_NAME ".pentries;"
     "INSERT INTO summary  SELECT NULL, s.name || '/' || sub.name, sub.type, sub.inode, sub.mode, sub.nlink, sub.uid, sub.gid, sub.size, sub.blksize, sub.blocks, sub.atime, sub.mtime, sub.ctime, sub.linkname, sub.xattrs, sub.totfiles, sub.totlinks, sub.minuid, sub.maxuid, sub.mingid, sub.maxgid, sub.minsize, sub.maxsize, sub.totltk, sub.totmtk, sub.totltm, sub.totmtm, sub.totmtg, sub.totmtt, sub.totsize, sub.minctime, sub.maxctime, sub.minmtime, sub.maxmtime, sub.minatime, sub.maxatime, sub.minblocks, sub.maxblocks, sub.totxattr, sub.depth, sub.mincrtime, sub.maxcrtime, sub.minossint1, sub.maxossint1, sub.totossint1, sub.minossint2, sub.maxossint2, sub.totossint2, sub.minossint3, sub.maxossint3, sub.totossint3, sub.minossint4, sub.maxossint4, sub.totossint4, sub.rectype, sub.pinode, 0, sub.rollupscore FROM summary as s, " SUBDIR_ATTACH_NAME ".summary as sub WHERE s.isroot == 1;";
-
-/* get number of non-dirs in this directory from the entries table */
-int get_nondirs(struct RollUp * rollup, struct DirStats * ds, sqlite3 * dst timestamp_sig) {
-    char * err = NULL;
-    const int exec_rc = sqlite3_exec(dst, "SELECT COUNT(*) FROM entries", add_entries_count, &ds->subnondir_count, &err);
-
-    if (exec_rc != SQLITE_OK) {
-        fprintf(stderr, "Warning: Failed to get entries row count from \"%s\": %s\n", rollup->data.name, err);
-    }
-    sqlite3_free(err);
-    return exec_rc;
-}
 
 /*
 @return -1 - could not move entries into pentries
@@ -599,6 +696,8 @@ void rollup(void * args timestamp_sig) {
     ds->level = dir->data.level;
     ds->subdir_count = dir->data.subdir_count;
     ds->subnondir_count = 0;
+    ds->too_many_before = 0;
+    ds->too_many_after = 0;
     ds->score = 0;
     ds->success = 1;
 
@@ -617,11 +716,6 @@ void rollup(void * args timestamp_sig) {
 
     /* can attempt to roll up */
     if (dst) {
-        /* get count of number of non-directories that will be affected */
-        timestamp_start(nondir_count);
-        get_nondirs(dir, ds, dst timestamp_args);
-        timestamp_end(timestamp_buffers, id, "nondir_count", nondir_count);
-
         /* check if rollup is allowed */
         ds->score = can_rollup(dir, ds, dst timestamp_args);
 
