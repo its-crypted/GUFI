@@ -100,23 +100,12 @@ struct RollUpStats {
     struct sll not_rolled_up;
     struct sll rolled_up;
 
-    size_t remaining;       /* subdirectories that remain after rolling up */
+    size_t remaining;       /* children that remain after rolling up */
 
     #ifdef DEBUG
     struct OutputBuffers * print_buffers;
     #endif
 };
-
-size_t rollup_distribution(const char * name, size_t * distribution) {
-    size_t total = 0;
-    fprintf(stderr, "    %s:\n", name);
-    for(size_t i = 1; i < 6; i++) {
-        fprintf(stderr, "        %zu: %19zu\n", i, distribution[i]);
-        total += distribution[i];
-    }
-    fprintf(stderr, "        Total: %15zu\n", total);
-    return total;
-}
 
 /* compare function for qsort */
 int compare_size_t(const void * lhs, const void * rhs) {
@@ -183,6 +172,10 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     for(int i = 0; i < path_count; i++) {
         fprintf(stderr, "    %s\n", paths[i]);
     }
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Thread Pool Size: %12d\n",  in.maxthreads);
+    fprintf(stderr, "Files/Links Limit: %11zu\n", in.max_in_dir);
+    fprintf(stderr, "\n");
 
     /* per-thread stats together */
     struct sll not_processed;
@@ -204,16 +197,21 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     }
 
     /* print stats of each type of directory */
-    print_stanza("Not Processed:", &not_processed, threads);
-    print_stanza("Not Rolled Up:", &not_rolled_up, threads);
-    print_stanza("Rolled Up:",     &rolled_up,     threads);
+    print_stanza("Not Processed:",  &not_processed, threads);
+    print_stanza("Cannot Roll Up:", &not_rolled_up, threads);
+    print_stanza("Can Roll Up:",    &rolled_up,     threads);
 
     /* get distribution of roll up scores */
-    size_t successful[6] = {0};
-    size_t failed[6] = {0};
+    size_t successful = 0;
+    size_t failed = 0;
     sll_loop(&rolled_up, node) {
         struct DirStats * ds = (struct DirStats *) sll_node_data(node);
-        (ds->success?successful:failed)[ds->score]++;
+        if (ds->success) {
+            successful++;
+        }
+        else {
+            failed++;
+        }
     }
 
     /* count empty directories */
@@ -238,9 +236,6 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
         rolled_up_empty += !ds->subnondir_count;
     }
 
-    rollup_distribution("Successful", successful);
-    rollup_distribution("Failed",     failed);
-
     const size_t total_nondirs = not_processed_nondirs +
                                  not_rolled_up_nondirs +
                                  rolled_up_nondirs;
@@ -253,6 +248,8 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
                               sll_get_size(&not_rolled_up) +
                               sll_get_size(&rolled_up);
 
+    fprintf(stderr, "    Successful: %14zu\n", successful);
+    fprintf(stderr, "    Failed:     %14zu\n", failed);
     fprintf(stderr, "Files/Links:    %zu\n", total_nondirs);
     fprintf(stderr, "Directories:    %zu (%zu empty)\n", total_dirs, empty);
     fprintf(stderr, "Total:          %zu\n", total_nondirs + total_dirs);
@@ -262,50 +259,6 @@ void print_stats(char ** paths, const int path_count, struct RollUpStats * stats
     sll_destroy(&not_rolled_up, free);
     sll_destroy(&not_processed, free);
 }
-
-/* print the result of a single roll up */
-/* name level score success */
-#if defined(DEBUG) && defined(PRINT_ROLLUP_SCORE)
-static inline
-void print_result(struct OutputBuffers * obufs, const size_t id,
-                  const char * name, const size_t level,
-                  const int score, const size_t success) {
-    char result[MAXSQL];
-    const size_t result_len = SNPRINTF(result, MAXSQL, " %zu 0 0\n", level);
-
-    struct OutputBuffer * obuf = &(obufs->buffers[id]);
-
-    const size_t name_len = strlen(name);
-    const size_t len = name_len + result_len;
-
-    /* not enough space remaining, so clear out buffer */
-    if ((obuf->capacity - obuf->filled) < len) {
-        pthread_mutex_lock(&obufs->mutex);
-        fwrite(obuf->buf, sizeof(char), obuf->filled, stderr);
-        obuf->filled = 0;
-        pthread_mutex_unlock(&obufs->mutex);
-    }
-
-    /* not enough space in entire buffer, so write directly */
-    if (len >= obuf->capacity) {
-        pthread_mutex_lock(&obufs->mutex);
-        fwrite(obuf->buf, sizeof(char), obuf->filled, stderr);
-        pthread_mutex_unlock(&obufs->mutex);
-    }
-
-    /* print name */
-    memcpy(obuf->buf + obuf->filled, name, name_len);
-
-    /* set results string */
-    result[result_len - 4] += score;
-    result[result_len - 2] += success;
-
-    /* print score and success */
-    memcpy(obuf->buf + obuf->filled + name_len, result, result_len);
-
-    obuf->filled += len;
-}
-#endif
 
 /* main data being passed around during walk */
 struct RollUp {
@@ -340,15 +293,11 @@ int get_permissions(void * args, int count, char ** data, char ** columns) {
 /*
 @return -1 - failed to open a database
          0 - do not roll up
-         1 - self and subdirectories are all o+rx
-         2 - self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx
-         3 - self and subdirectories have same user permissions, go-rx, uid
-         4 - self and subdirectories have same user, group, and others permissions, uid, and gid
-         5 - leaf directory
+         1 - all permissions match
 */
 int check_permissions(struct Permissions * curr, const size_t child_count, struct sll * child_list, const size_t id timestamp_sig) {
     if (child_count == 0) {
-        return 5;
+        return 1;
     }
 
     timestamp_create_buffer(4096);
@@ -404,51 +353,36 @@ int check_permissions(struct Permissions * curr, const size_t child_count, struc
         return -1;
     }
 
-    size_t o_plus_rx = 0;
-    size_t ugo = 0;
-    size_t ug = 0;
-    size_t u = 0;
+    int legal = 0;
     for(size_t i = 0; i < child_count; i++) {
-        /* self and subdirectories are all o+rx */
-        o_plus_rx += (((curr->mode          & 0005) == 0005) &&
-                      ((child_perms[i].mode & 0005) == 0005) &&
-                      (curr->uid == child_perms[i].uid) &&
-                      (curr->gid == child_perms[i].gid));
+        /* so long as one condition is true, child[i] can be rolled up into the current directory */
+        legal += (
+            /* self and child are o+rx */
+            (((curr->mode          & 0005) == 0005) &&
+             ((child_perms[i].mode & 0005) == 0005) &&
+              (curr->uid == child_perms[i].uid) &&
+              (curr->gid == child_perms[i].gid)) ||
 
-        /* self and subdirectories have same user, group, and others permissions, uid, and gid */
-        ugo += (((curr->mode & 0555) == (child_perms[i].mode & 0555)) &&
-                (curr->uid == child_perms[i].uid) &&
-                (curr->gid == child_perms[i].gid));
+            /* self and child have same user, group, and others permissions, uid, and gid */
+            (((curr->mode & 0555) == (child_perms[i].mode & 0555)) &&
+              (curr->uid == child_perms[i].uid) &&
+              (curr->gid == child_perms[i].gid)) ||
 
-        /* self and subdirectories have same user and group permissions, uid, and gid, and top is o-rx */
-        ug += (((curr->mode & 0550) == (child_perms[i].mode & 0550)) &&
-                (curr->uid == child_perms[i].uid) &&
-                (curr->gid == child_perms[i].gid));
+            /* self and child have same user and group permissions, uid, and gid, and top is o-rx */
+            (((curr->mode & 0550) == (child_perms[i].mode & 0550)) &&
+              (curr->uid == child_perms[i].uid) &&
+              (curr->gid == child_perms[i].gid)) ||
 
-        /* self and subdirectories have same user permissions, go-rx, uid */
-        u += (((curr->mode & 0500) == (child_perms[i].mode & 0500)) &&
-              (curr->uid == child_perms[i].uid));
+            /* self and child have same user permissions, go-rx, uid */
+            (((curr->mode & 0500) == (child_perms[i].mode & 0500)) &&
+              (curr->uid == child_perms[i].uid))
+        );
     }
 
     free(child_perms);
 
-    if (o_plus_rx == child_count) {
-        return 1;
-    }
-
-    if (ugo == child_count) {
-        return 4;
-    }
-
-    if (ug == child_count) {
-        return 2;
-    }
-
-    if (u == child_count) {
-        return 3;
-    }
-
-    return 0;
+    /* need all children to have good permissions */
+    return (legal == child_count);
 }
 /* ************************************** */
 
@@ -478,10 +412,10 @@ int can_rollup(struct RollUp * rollup,
         goto end_can_rollup;
     }
 
-    /* all subdirectories are expected to pass */
+    /* all children are expected to pass */
     size_t total_subdirs = 0;
 
-    /* check if ALL subdirectories have been rolled up */
+    /* check if ALL children have been rolled up */
     timestamp_start(check_subdirs_rolledup);
     size_t rolledup = 0;
     sll_loop(&rollup->data.subdirs, node) {
@@ -491,7 +425,7 @@ int can_rollup(struct RollUp * rollup,
     }
     timestamp_end(timestamp_buffers, rollup->data.tid.up, "check_subdirs_rolledup", check_subdirs_rolledup);
 
-    /* not all subdirectories were rolled up, so cannot roll up */
+    /* not all children were rolled up, so cannot roll up */
     if (total_subdirs != rolledup) {
         goto end_can_rollup;
     }
@@ -508,7 +442,7 @@ int can_rollup(struct RollUp * rollup,
         goto end_can_rollup;
     }
 
-    /* check if the permissions of this directory and its subdirectories match */
+    /* check if the permissions of this directory and its children match */
     timestamp_start(check_perms);
     legal = check_permissions(&perms, total_subdirs, &rollup->data.subdirs, rollup->data.tid.up timestamp_args);
     timestamp_end(timestamp_buffers, rollup->data.tid.up, "check_perms", check_perms);
@@ -539,8 +473,8 @@ int add_entries_count(void * args, int count, char ** data, char ** columns) {
 /* location of the 0 in ROLLUP_CURRENT_DIR */
 static const size_t rollup_score_offset = sizeof(ROLLUP_CURRENT_DIR) - sizeof("0;");
 
-/* copy subdirectory pentries into pentries */
-/* copy subdirectory summary into summary */
+/* copy child pentries into pentries */
+/* copy child summary into summary */
 static const char rollup_subdir[] =
     "INSERT INTO pentries SELECT * FROM " SUBDIR_ATTACH_NAME ".pentries;"
     "INSERT INTO summary  SELECT NULL, s.name || '/' || sub.name, sub.type, sub.inode, sub.mode, sub.nlink, sub.uid, sub.gid, sub.size, sub.blksize, sub.blocks, sub.atime, sub.mtime, sub.ctime, sub.linkname, sub.xattrs, sub.totfiles, sub.totlinks, sub.minuid, sub.maxuid, sub.mingid, sub.maxgid, sub.minsize, sub.maxsize, sub.totltk, sub.totmtk, sub.totltm, sub.totmtm, sub.totmtg, sub.totmtt, sub.totsize, sub.minctime, sub.maxctime, sub.minmtime, sub.maxmtime, sub.minatime, sub.maxatime, sub.minblocks, sub.maxblocks, sub.totxattr, sub.depth, sub.mincrtime, sub.maxcrtime, sub.minossint1, sub.maxossint1, sub.totossint1, sub.minossint2, sub.maxossint2, sub.totossint2, sub.minossint3, sub.maxossint3, sub.totossint3, sub.minossint4, sub.maxossint4, sub.totossint4, sub.rectype, sub.pinode, 0, sub.rollupscore FROM summary as s, " SUBDIR_ATTACH_NAME ".summary as sub WHERE s.isroot == 1;";
@@ -560,7 +494,7 @@ int get_nondirs(struct RollUp * rollup, struct DirStats * ds, sqlite3 * dst time
 /*
 @return -1 - could not move entries into pentries
          0 - success
-         1 - at least one subdirectory failed to be moved
+         1 - at least one child failed to be moved
 */
 int do_rollup(struct RollUp * rollup,
               struct DirStats * ds,
@@ -600,7 +534,7 @@ int do_rollup(struct RollUp * rollup,
         goto end_rollup;
     }
 
-    /* process each subdirectory */
+    /* process each child */
     timestamp_start(rollup_subdirs);
 
     sll_loop(&rollup->data.subdirs, node) {
@@ -716,7 +650,7 @@ void rollup(void * args timestamp_sig) {
             /* count this directory */
             stats[id].remaining++;
 
-            /* count only subdirectories that were rolled up */
+            /* count only children that were rolled up */
             /* in order to not double count */
             sll_loop(&dir->data.subdirs, node) {
                 struct RollUp * child = (struct RollUp *) sll_node_data(node);
@@ -725,12 +659,6 @@ void rollup(void * args timestamp_sig) {
                 }
             }
         }
-
-        #if defined(DEBUG) && defined(PRINT_ROLLUP_SCORE)
-        print_result(stats->print_buffers, id,
-                     dir->data.name, ds->level,
-                     ds->score, ds->success);
-        #endif
     }
     else {
         /* did not check if can roll up */
