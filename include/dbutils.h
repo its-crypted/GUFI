@@ -133,4 +133,6 @@ int addqueryfuncs(sqlite3 *db, size_t id, size_t lvl, char * starting_dir);
 
 size_t print_results(sqlite3_stmt *res, FILE *out, const int printpath, const int printheader, const int printrows, const char *delim);
 
+int get_rollupscore(const char *name, sqlite3 *db, int *rollupscore);
+
 #endif

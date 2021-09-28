@@ -471,19 +471,6 @@ do {                                                                    \
 #define querydb(dbname, db, query, callback, obufs, id, ts_name, rc)
 #endif
 
-/* information to pull from the summary table before continuing */
-struct DirData {
-    ino_t inode;
-    int rollup_score;
-};
-
-int get_dir_data(void * args, int count, char **data, char **columns) {
-    struct DirData * dd = (struct DirData *) args;
-    dd->inode = atoi(data[0]);
-    dd->rollup_score = atoi(data[1]);
-    return 0;
-}
-
 int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) {
     sqlite3 *db = NULL;
     int recs;
@@ -573,14 +560,10 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     timestamp_set_end(open_call);
     #endif
 
-    struct DirData dd = {0};
-    if (db) {
-        char * err = NULL;
-        if (sqlite3_exec(db, "SELECT inode, rollupscore FROM summary WHERE isroot == 1", get_dir_data, &dd, &err) != SQLITE_OK) {
-            fprintf(stderr, "Could not get initial summary data from \"%s\": %s", work->name, err);
-            sqlite3_free(err);
-            goto close_db;
-        }
+    /* get the rollup score */
+    int rollupscore = 0;
+    if (get_rollupscore(work->name, db, &rollupscore) != 0) {
+        goto close_db;
     }
 
     /* this is needed to add some query functions like path() uidtouser() gidtogroup() */
@@ -626,7 +609,7 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     /* so we have to go on and query summary and entries possibly */
     if (recs > 0) {
         /* push subdirectories into the queue */
-        if (dd.rollup_score == 0) {
+        if (rollupscore == 0) {
             #ifdef DEBUG
             timestamp_set_start(descend_call);
             #ifdef SUBDIRECTORY_COUNTS

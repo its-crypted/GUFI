@@ -1045,3 +1045,21 @@ size_t print_results(sqlite3_stmt *res, FILE *out, const int printpath, const in
 
     return rec_count;
 }
+
+static int get_rollupscore_callback(void * args, int count, char **data, char **columns) {
+    int * rollupscore = (int *) args;
+    *rollupscore = atoi(data[0]);
+    return 0;
+}
+
+int get_rollupscore(const char *name, sqlite3 *db, int *rollupscore) {
+    char * err = NULL;
+    if (sqlite3_exec(db, "SELECT rollupscore FROM summary WHERE isroot == 1",
+                     get_rollupscore_callback, rollupscore, &err) != SQLITE_OK) {
+        fprintf(stderr, "Could not get rollup score from \"%s\": %s", name, err);
+        sqlite3_free(err);
+        return -1;
+    }
+
+    return 0;
+}
