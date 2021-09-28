@@ -1056,7 +1056,7 @@ int get_rollupscore(const char *name, sqlite3 *db, int *rollupscore) {
     char * err = NULL;
     if (sqlite3_exec(db, "SELECT rollupscore FROM summary WHERE isroot == 1",
                      get_rollupscore_callback, rollupscore, &err) != SQLITE_OK) {
-        fprintf(stderr, "Could not get rollup score from \"%s\": %s", name, err);
+        fprintf(stderr, "Could not get rollup score from \"%s\": %s\n", name, err);
         sqlite3_free(err);
         return -1;
     }

@@ -560,12 +560,6 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     timestamp_set_end(open_call);
     #endif
 
-    /* get the rollup score */
-    int rollupscore = 0;
-    if (get_rollupscore(work->name, db, &rollupscore) != 0) {
-        goto close_db;
-    }
-
     /* this is needed to add some query functions like path() uidtouser() gidtogroup() */
     #ifdef ADDQUERYFUNCS
     timestamp_set_start(addqueryfuncs_call);
@@ -608,6 +602,15 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
     }
     /* so we have to go on and query summary and entries possibly */
     if (recs > 0) {
+        /* get the rollup score
+         * ignore errors - if the db wasn't opened, or if
+         * summary is missing the columns, keep descending
+         */
+        int rollupscore = 0;
+        if (db) {
+            get_rollupscore(work->name, db, &rollupscore);
+        }
+
         /* push subdirectories into the queue */
         if (rollupscore == 0) {
             #ifdef DEBUG
@@ -674,7 +677,6 @@ int processdir(struct QPTPool * ctx, const size_t id, void * data, void * args) 
         }
     }
 
-  close_db:
     #ifdef OPENDB
     timestamp_set_start(close_call);
     /* if we have an out db we just detach gufi db */
