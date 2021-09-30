@@ -65,39 +65,21 @@ DEBUG="$(dirname ${BASH_SOURCE[0]})"
 
 . ${DEBUG}/prepare_timestamps.sh $@
 
-gnuplot <<EOF
-set terminal pngcairo color solid size 12800,4800 font ",32"
-set output '${file}.png'
-set title "gufi_query Events"
-set xlabel "Seconds Since Arbitrary Epoch"
-set ylabel "Thread #"
-set key outside right
-set yrange [${lowest}:${highest}]
-set ytics 5
-plot $(plot_args "wf"                32  "wf")
-     $(plot_args "wf_process_work"   24  "wf_process_work")
-     $(plot_args "opendir"            8  "opendir")
-     $(plot_args "opendb"             8  "opendb")
-     $(plot_args "descend"            8  "descend")
-     $(plot_args "sqlsum"             8  "sqlsum")
-     $(plot_args "sqlent"             8  "sqlent")
-     $(plot_args "closedb"            8  "closedb")
-     $(plot_args "closedir"           8  "closedir")
-     $(plot_args "output_timestamps"  8  "output_timestamps")
-     $(plot_args "wf_next_work"      24  "wf_next_work")
-EOF
+function plot() {
+    output_name="$1"
+    shift
+    extra_args="$@"
 
-gnuplot <<EOF
-set terminal pngcairo color solid size 6400,3200 font ",31"
-set output "${file}-zoomed-in.png"
+    gnuplot <<EOF
+set terminal pngcairo color solid size 12800,4800 font ",32"
+set output '${output_name}.png'
 set title "gufi_query Events"
 set xlabel "Seconds Since Arbitrary Epoch"
 set ylabel "Thread #"
-set clip two
 set key outside right
-set xrange [1.1:1.15]
 set yrange [${lowest}:${highest}]
 set ytics 5
+${extra_args}
 plot $(plot_args "wf"                32  "wf")
      $(plot_args "wf_process_work"   24  "wf_process_work")
      $(plot_args "opendir"            8  "opendir")
@@ -110,5 +92,9 @@ plot $(plot_args "wf"                32  "wf")
      $(plot_args "output_timestamps"  8  "output_timestamps")
      $(plot_args "wf_next_work"      24  "wf_next_work")
 EOF
+}
+
+plot "${file}" &
+plot "${file}-zoomed-in" "set xrange [1.1:1.15]" &
 
 wait
